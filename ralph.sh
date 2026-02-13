@@ -862,6 +862,14 @@ while [[ "$MAX" -eq -1 ]] || [[ "$i" -lt "$MAX" ]]; do
     rm -f "$tmpfile"
     set -e
     
+    # Circuit breaker: bail immediately on auth failures (expired OAuth token, etc.)
+    if echo "$result" | grep -qi "authentication_error\|Failed to authenticate\|OAuth token has expired\|401.*auth"; then
+        log "ERROR" "Authentication failure detected — aborting. Re-auth with: claude login"
+        echo "🔒 Auth failure — ralph.sh exiting to prevent infinite retry loop."
+        echo "   Fix: run 'claude login' to refresh OAuth token, then re-run ralph."
+        exit 1
+    fi
+
     # Log AI output (truncated)
     echo "$result" | head -50 >> "$LOG_FILE"
     echo "[... truncated ...]" >> "$LOG_FILE"
