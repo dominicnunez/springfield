@@ -1132,6 +1132,12 @@ while [[ "$MAX" -eq -1 ]] || [[ "$i" -lt "$MAX" ]]; do
         echo "  ✅ All tests passing!"
         echo "  📝 Log: $LOG_FILE"
         echo "==========================================="
+        
+        # Notify via OpenClaw (if available)
+        if command -v openclaw &>/dev/null; then
+            openclaw message send -t "${RALPH_NOTIFY_TARGET:-}" -m "✅ Ralph finished **$PROJECT_NAME** — all tasks complete after $i iterations. All tests passing." 2>/dev/null || true
+        fi
+        
         exit 0
     fi
 
@@ -1148,4 +1154,10 @@ echo "==========================================="
 echo "  Reached max iterations ($MAX)"
 echo "  📝 Log: $LOG_FILE"
 echo "==========================================="
+
+# Notify via OpenClaw (if available)
+if command -v openclaw &>/dev/null; then
+    openclaw message send -t "${RALPH_NOTIFY_TARGET:-}" -m "⚠️ Ralph hit max iterations ($MAX) on **$PROJECT_NAME** — tasks remain incomplete." 2>/dev/null || true
+fi
+
 exit 1

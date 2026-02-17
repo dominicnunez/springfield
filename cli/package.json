@@ -1,7 +1,7 @@
 {
-  "name": "sfs-cli",
+  "name": "sfs-ai",
   "version": "1.0.0",
-  "description": "Autonomous AI coding agent with enforced test verification - supports Claude Code and OpenCode",
+  "description": "Ship First, Ship Fast — Autonomous AI coding agent with enforced test verification",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -34,13 +34,19 @@
     "opencode",
     "testing",
     "tdd",
-    "cli"
+    "cli",
+    "agent",
+    "llm"
   ],
-  "author": "",
+  "author": "Dominic Nunez",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dominicnunez/ralph"
+    "url": "git+https://github.com/dominicnunez/ralph.git"
+  },
+  "homepage": "https://github.com/dominicnunez/ralph#readme",
+  "bugs": {
+    "url": "https://github.com/dominicnunez/ralph/issues"
   },
   "dependencies": {
     "commander": "^13.0.0",

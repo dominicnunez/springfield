@@ -9,7 +9,7 @@ An autonomous AI coding agent runner that orchestrates iterative development wor
 **Option A: npm** (recommended)
 
 ```bash
-npm install -g sfs-cli
+npm install -g sfs-ai
 
 # Then use anywhere
 sfs                        # Uses PRD.md with OpenCode (default)
@@ -96,7 +96,7 @@ Ralph uses a two-level config system:
 
 ### Global Config
 
-Created automatically on `npm install -g sfs-cli` with sensible defaults:
+Created automatically on `npm install -g sfs-ai` with sensible defaults:
 
 ```bash
 ENGINE=opencode
@@ -223,7 +223,7 @@ This keeps your workspace clean and maintains a history of completed work.
 
 ## Requirements
 
-**npm version (`sfs-cli`):**
+**npm version (`sfs-ai`):**
 - Node.js 18+ or Bun
 
 **Bash version (`ralph.sh`):**
