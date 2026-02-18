@@ -278,4 +278,4 @@ If you're upgrading from an older version that used `.ralph/ralph.env` or `~/.co
 
 ## License
 
-MIT
+[PolyForm Noncommercial 1.0.0](LICENSE)
