@@ -25,6 +25,9 @@ __pycache__/
 .env.*.local
 ralph.env
 
+# SFK config
+.sfk/
+
 # Build outputs
 dist/
 build/
@@ -44,6 +47,11 @@ result
 # Project planning
 PRD.md
 completed-prds/
+
+# Willie audit
+.audit-logs/
+audit-report.md
+audit-prompt.md
 
 # Test artifacts
 hello.txt

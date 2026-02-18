@@ -1,6 +1,6 @@
-# Ralph
+# Springfield Kit (SFK)
 
-An autonomous AI coding agent runner that orchestrates iterative development workflows. Ralph automates the process of having an AI agent work through a task list one task at a time, with built-in progress tracking and learning mechanisms.
+An autonomous AI coding agent runner that orchestrates iterative development workflows. SFK automates the process of having an AI agent work through a task list one task at a time, with built-in progress tracking and learning mechanisms.
 
 **Key differentiator:** Enforced test verification - Ralph won't mark tasks complete unless tests are written and passing.
 
@@ -9,12 +9,12 @@ An autonomous AI coding agent runner that orchestrates iterative development wor
 **Option A: npm** (recommended)
 
 ```bash
-npm install -g sfs-ai
+npm install -g sfk
 
 # Then use anywhere
-sfs                        # Uses PRD.md with OpenCode (default)
-sfs --claude               # Use Claude Code
-sfs --model sonnet         # Override model
+sfk                        # Uses PRD.md with OpenCode (default)
+sfk --claude               # Use Claude Code
+sfk --model sonnet         # Override model
 ```
 
 **Option B: Clone + Bash**
@@ -33,7 +33,7 @@ Both versions have identical features.
 Ralph runs an AI coding assistant in a loop, feeding it tasks from a PRD (Product Requirements Document) and tracking progress across iterations. Each iteration:
 
 1. Reads `PRD.md` to find the first incomplete task
-2. Reads progress file from `~/.ralph/progress/` to learn from previous iterations
+2. Reads progress file from `~/.sfk/progress/` to learn from previous iterations
 3. Implements exactly ONE task
 4. **Verifies test files were created/modified**
 5. **Runs tests to verify the implementation**
@@ -53,7 +53,7 @@ Ralph runs an AI coding assistant in a loop, feeding it tasks from a PRD (Produc
 2. Run Ralph:
    ```bash
    # Using npm CLI
-   sfs
+   sfk
 
    # Using bash script
    ./ralph.sh
@@ -64,81 +64,96 @@ Ralph will work through each task, running tests and committing progress automat
 ## CLI Usage
 
 ```bash
-sfs                        # Uses PRD.md, OpenCode engine (default)
-sfs --opencode             # Explicit OpenCode
-sfs --claude               # Use Claude Code
-sfs --model big-pickle     # Override model
-sfs --max-iterations 20    # Custom iteration limit
-sfs --skip-commit          # Don't auto-commit
-sfs --no-tests             # Skip test verification (not recommended)
-sfs --prd tasks.md         # Use different PRD file
-sfs -v                     # Verbose output
-sfs --help                 # Show all options
+sfk                        # Uses PRD.md, OpenCode engine (default)
+sfk --opencode             # Explicit OpenCode
+sfk --claude               # Use Claude Code
+sfk --model big-pickle     # Override model
+sfk --max-iterations 20    # Custom iteration limit
+sfk --skip-commit          # Don't auto-commit
+sfk --no-tests             # Skip test verification (not recommended)
+sfk --prd tasks.md         # Use different PRD file
+sfk -v                     # Verbose output
+sfk --help                 # Show all options
 ```
 
 ## Configuration
 
-Ralph uses a two-level config system:
+SFK uses a two-level INI config system:
 
 | Location | Purpose |
 |----------|---------|
-| `~/.config/ralph/ralph.env` | Global defaults (created on install) |
-| `.ralph/ralph.env` | Project-specific overrides |
+| `~/.config/sfk/config` | Global defaults (created on install) |
+| `.sfk/config` | Project-specific overrides |
 
 ### Config Priority
 
 ```
 1. CLI arguments          (--model, --engine, etc.)
 2. Environment variables  (OC_PRIME_MODEL, etc.)
-3. Project config         (.ralph/ralph.env)
-4. Global config          (~/.config/ralph/ralph.env)
+3. Project config         (.sfk/config)
+4. Global config          (~/.config/sfk/config)
 ```
 
 ### Global Config
 
-Created automatically on `npm install -g sfs-ai` with sensible defaults:
+Created automatically on `npm install -g sfk` with sensible defaults:
 
-```bash
-ENGINE=opencode
-OC_PRIME_MODEL=big-pickle
-CLAUDE_MODEL=sonnet
+```ini
+[engine]
+type = opencode
 
-MAX_ITERATIONS=10
-SLEEP_SECONDS=2
-SKIP_COMMIT=0
-SKIP_TEST_VERIFY=0
+[models]
+claude = sonnet
+claude-effort = high
+opencode-primary = big-pickle
+
+[ralph]
+max-iterations = 10
+sleep-seconds = 2
+skip-commit = false
+
+[willie]
+max-iterations = 0
 ```
 
 ### Project Config
 
-Create `.ralph/ralph.env` to override settings for a specific project:
+Create `.sfk/config` to override settings for a specific project:
 
 ```bash
-mkdir -p .ralph
-cat > .ralph/ralph.env << 'EOF'
-# Use Claude for this project
-ENGINE=claude
-CLAUDE_MODEL=opus
+mkdir -p .sfk
+cat > .sfk/config << 'EOF'
+[engine]
+type = claude
 
-# Custom test command
-TEST_CMD="npm run test:ci"
+[ralph]
+model = opus
+effort = high
+test-cmd = npm run test:ci
 EOF
+```
+
+### Per-Agent Model/Effort
+
+Each agent can override the global model and effort level:
+
+```ini
+[models]
+claude = sonnet           # global default
+claude-effort = high      # global default effort
+
+[ralph]
+model = sonnet            # ralph uses sonnet
+effort = high
+
+[willie]
+model = opus              # willie uses opus
+effort = high
 ```
 
 ### Available Settings
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `ENGINE` | `opencode` | AI engine: `opencode` or `claude` |
-| `OC_PRIME_MODEL` | `big-pickle` | Primary model for OpenCode |
-| `CLAUDE_MODEL` | `sonnet` | Model for Claude |
-| `OC_FALL_MODEL` | (none) | Fallback model for rate limits (OpenCode) |
-| `MAX_ITERATIONS` | `10` | Max iterations (-1 = infinite) |
-| `SLEEP_SECONDS` | `2` | Pause between iterations |
-| `SKIP_COMMIT` | `0` | Set to `1` to disable auto-commit |
-| `SKIP_TEST_VERIFY` | `0` | Set to `1` to skip test verification |
-| `TEST_CMD` | (auto) | Custom test command |
-| `RALPH_LOG_DIR` | `~/.ralph/logs` | Log directory |
+See `config.example` for all available settings with documentation.
 
 ### Test Auto-Detection
 
@@ -153,14 +168,14 @@ Ralph automatically detects your test command based on project files:
 | `go.mod` | `go test ./...` |
 | `Cargo.toml` | `cargo test` |
 
-If auto-detection fails or you need a custom command, set `TEST_CMD` in your config.
+If auto-detection fails or you need a custom command, set `test-cmd` under `[ralph]` in your config.
 
 ## Project Files
 
 | File | Description |
 |------|-------------|
 | `PRD.md` | Task list with checkbox format (required) |
-| `~/.ralph/progress/progress-<project>.log` | Centralized progress tracking across iterations |
+| `~/.sfk/progress/progress-<project>.log` | Centralized progress tracking across iterations |
 | `AGENTS.md` | Reusable patterns for the codebase (optional) |
 
 ## Key Features
@@ -169,12 +184,12 @@ If auto-detection fails or you need a custom command, set `TEST_CMD` in your con
 - **Enforced test writing** - Verifies test files were actually created/modified
 - **Test-gated completion** - Runs test suite after each iteration, blocks progress on failure
 - **Double verification** - PRD.md check + final test suite before declaring complete
-- **Progress persistence** - Learnings survive across iterations in `~/.ralph/progress/`
-- **External logging** - Per-project logs at `~/.ralph/logs/ralph-<project>.log`
+- **Progress persistence** - Learnings survive across iterations in `~/.sfk/progress/`
+- **External logging** - Per-project logs at `~/.sfk/logs/sfk-<project>.log`
 - **Auto-commit** - Commits changes automatically with descriptive messages
 - **Automatic fallback** - Switches to fallback model on rate limits (OpenCode)
 - **Skip commits** - Test PRDs without polluting git history
-- **Configurable** - Central config file for customization
+- **Configurable** - Per-agent model and effort settings
 
 ## Test Verification Flow
 
@@ -202,7 +217,7 @@ This prevents the AI from marking tasks complete without actually writing tests.
 
 ### Rate Limit Handling (OpenCode)
 
-If a rate limit is detected and `OC_FALL_MODEL` is configured, Ralph automatically switches to the fallback model and retries.
+If a rate limit is detected and `opencode-fallback` is configured, Ralph automatically switches to the fallback model and retries.
 
 ## Exit Codes
 
@@ -223,7 +238,7 @@ This keeps your workspace clean and maintains a history of completed work.
 
 ## Requirements
 
-**npm version (`sfs-ai`):**
+**npm version (`sfk`):**
 - Node.js 18+ or Bun
 
 **Bash version (`ralph.sh`):**
@@ -286,6 +301,10 @@ The loop exits when an audit produces zero findings.
 | `audit-report.md` | Generated findings (gitignored) |
 | `known-exceptions.md` | Documented intentional tradeoffs and false positives |
 | `.audit-logs/` | Per-step logs for each iteration (gitignored) |
+
+## Legacy Config Migration
+
+If you're upgrading from an older version that used `.ralph/ralph.env` or `~/.config/ralph/ralph.env`, SFK will detect the old config, warn you, and fall back to reading it. To migrate, create the new config at `~/.config/sfk/config` using the INI format shown above. See `config.example` for the full reference.
 
 ## License
 

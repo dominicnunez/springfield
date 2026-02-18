@@ -1,16 +1,16 @@
-# sfs-ai
+# sfk
 
-**Ship First, Ship Fast** — An autonomous AI coding agent with enforced test verification.
+**Springfield Kit** — An autonomous AI coding agent with enforced test verification.
 
 Ralph runs your AI coding assistant (OpenCode or Claude) in a loop, working through tasks from a PRD one at a time. The key differentiator: **it won't mark tasks complete unless tests are written and passing.**
 
 ## Install
 
 ```bash
-npm install -g sfs-ai
+npm install -g sfk
 
 # or with bun
-bun install -g sfs-ai
+bun install -g sfk
 ```
 
 ## Quick Start
@@ -19,13 +19,13 @@ bun install -g sfs-ai
    ```markdown
    ## Tasks
    - [ ] Implement user authentication
-   - [ ] Add database migrations  
+   - [ ] Add database migrations
    - [ ] Set up API endpoints
    ```
 
 2. Run:
    ```bash
-   sfs
+   sfk
    ```
 
 Ralph works through each task, running tests and committing progress automatically.
@@ -33,28 +33,34 @@ Ralph works through each task, running tests and committing progress automatical
 ## Usage
 
 ```bash
-sfs                        # Uses PRD.md with OpenCode (default)
-sfs --claude               # Use Claude Code instead
-sfs --model opus           # Override model
-sfs --max-iterations 20    # Limit iterations
-sfs --skip-commit          # Don't auto-commit
-sfs --no-tests             # Skip test verification (not recommended)
-sfs --prd tasks.md         # Use different PRD file
-sfs -v                     # Verbose output
+sfk                        # Uses PRD.md with OpenCode (default)
+sfk --claude               # Use Claude Code instead
+sfk --model opus           # Override model
+sfk --max-iterations 20    # Limit iterations
+sfk --skip-commit          # Don't auto-commit
+sfk --no-tests             # Skip test verification (not recommended)
+sfk --prd tasks.md         # Use different PRD file
+sfk -v                     # Verbose output
 ```
 
 ## Configuration
 
-**Global:** `~/.config/ralph/ralph.env`  
-**Project:** `.ralph/ralph.env`
+**Global:** `~/.config/sfk/config`
+**Project:** `.sfk/config`
 
-```bash
-ENGINE=opencode            # or 'claude'
-OC_PRIME_MODEL=opus        # Primary model
-MAX_ITERATIONS=-1          # -1 = infinite
-SKIP_COMMIT=0              # 1 = disable auto-commit
-SKIP_TEST_VERIFY=0         # 1 = skip test checks (not recommended)
-PUSH_AFTER_COMMIT=0        # 1 = push after each commit
+```ini
+[engine]
+type = opencode
+
+[models]
+claude = sonnet
+claude-effort = high
+opencode-primary = big-pickle
+
+[ralph]
+max-iterations = -1
+skip-commit = false
+push-after-commit = false
 ```
 
 ## How It Works
@@ -84,7 +90,7 @@ Ralph detects your test framework automatically:
 | Rust | `cargo test` |
 | Python | `pytest` |
 
-Override with `TEST_CMD` in config if needed.
+Override with `test-cmd` under `[ralph]` in config if needed.
 
 ## Requirements
 
