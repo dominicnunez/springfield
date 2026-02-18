@@ -830,6 +830,13 @@ while [[ "$MAX" -eq -1 ]] || [[ "$i" -lt "$MAX" ]]; do
     # Record HEAD before iteration (for push detection)
     head_before=$(git rev-parse HEAD 2>/dev/null || echo "")
     
+    # Check PRD.md exists at start of each iteration
+    if [[ ! -f "PRD.md" ]]; then
+        log "INFO" "No PRD.md found — nothing to do, exiting."
+        echo "✅ No PRD.md found — all done."
+        exit 0
+    fi
+
     current_task=$(get_current_task)
 
     # Save iteration state for resume capability
