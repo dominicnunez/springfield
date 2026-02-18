@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: cli
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: cli
+        run: bun run typecheck
+
+      - name: Lint
+        working-directory: cli
+        run: bun run lint
+
+      - name: Test
+        working-directory: cli
+        run: bun test
+
+      - name: Build all platforms
+        working-directory: cli
+        run: bun run build:all
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF#refs/tags/}"
+          gh release create "$version" \
+            --title "$version" \
+            --generate-notes \
+            cli/dist/sfk-darwin-arm64 \
+            cli/dist/sfk-darwin-x64 \
+            cli/dist/sfk-linux-x64 \
+            cli/dist/sfk-linux-arm64 \
+            cli/dist/sfk-windows-x64.exe
