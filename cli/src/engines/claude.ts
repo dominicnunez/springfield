@@ -22,6 +22,7 @@ export class ClaudeEngine implements Engine {
       "--model",
       this.model,
       "--dangerously-skip-permissions",
+      "--no-session-persistence",
       "-p",
       prompt,
     ];
