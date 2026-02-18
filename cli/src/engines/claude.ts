@@ -21,8 +21,6 @@ export class ClaudeEngine implements Engine {
     const args = [
       "--model",
       this.model,
-      "--effort",
-      this.effort,
       "--dangerously-skip-permissions",
       "-p",
       prompt,
