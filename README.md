@@ -248,6 +248,45 @@ npx tsx src/index.ts --help
 bun run build:all
 ```
 
+## Willie — Continuous Audit Loop
+
+Willie is Ralph's counterpart: Ralph builds, Willie audits. It runs a continuous loop of audit → validate → fix until the codebase is clean.
+
+### Setup
+
+1. Copy `willie.sh` to your project root
+2. Create `audit-prompt.md` with your audit instructions
+3. Run Willie
+
+### Usage
+
+```bash
+./willie.sh             # full loop, unlimited
+./willie.sh 3           # full loop, 3 iterations
+./willie.sh audit       # start from audit, loop
+./willie.sh validate    # start from validate, loop
+./willie.sh fix         # start from fix, loop
+```
+
+### How It Works
+
+Each iteration runs three steps:
+
+1. **Audit** — Opus scans the codebase using your `audit-prompt.md`, writes findings to `audit-report.md`
+2. **Validate** — Opus reads the actual code at each finding, moves false positives to `known-exceptions.md`
+3. **Fix** — Opus applies proper long-term fixes, commits each one, deletes the report when done
+
+The loop exits when an audit produces zero findings.
+
+### Files
+
+| File | Description |
+|------|-------------|
+| `audit-prompt.md` | Your audit instructions (required, gitignored) |
+| `audit-report.md` | Generated findings (gitignored) |
+| `known-exceptions.md` | Documented intentional tradeoffs and false positives |
+| `.audit-logs/` | Per-step logs for each iteration (gitignored) |
+
 ## License
 
 MIT
