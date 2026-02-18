@@ -52,7 +52,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   program
     .name("sfk")
     .description(
-      "Springfield Kit — Autonomous AI coding agent with enforced test verification",
+      "Springfield Kit — Autonomous AI development kit",
     )
     .version(VERSION);
 

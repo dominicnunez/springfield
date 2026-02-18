@@ -1,8 +1,6 @@
 # Springfield Kit (SFK)
 
-An autonomous AI coding agent runner that orchestrates iterative development workflows. SFK automates the process of having an AI agent work through a task list one task at a time, with built-in progress tracking and learning mechanisms.
-
-**Key differentiator:** Enforced test verification - Ralph won't mark tasks complete unless tests are written and passing.
+Autonomous AI development kit.
 
 ## Install
 
