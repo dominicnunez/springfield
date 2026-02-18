@@ -5,6 +5,7 @@ describe("btca integration", () => {
   test("generatePrompt includes btca when enabled with resources", () => {
     const prompt = generatePrompt({
       skipCommit: false,
+      progressFile: "/tmp/progress.log",
       btcaEnabled: true,
       btcaResources: ["gin", "sqlx"],
     });
@@ -17,6 +18,7 @@ describe("btca integration", () => {
   test("generatePrompt includes btca without resources", () => {
     const prompt = generatePrompt({
       skipCommit: false,
+      progressFile: "/tmp/progress.log",
       btcaEnabled: true,
       btcaResources: [],
     });
@@ -28,6 +30,7 @@ describe("btca integration", () => {
   test("generatePrompt excludes btca when disabled", () => {
     const prompt = generatePrompt({
       skipCommit: false,
+      progressFile: "/tmp/progress.log",
       btcaEnabled: false,
       btcaResources: ["gin"],
     });
@@ -37,6 +40,7 @@ describe("btca integration", () => {
   test("generateSingleTaskPrompt includes btca when enabled", () => {
     const prompt = generateSingleTaskPrompt("add feature", {
       skipCommit: false,
+      progressFile: "/tmp/progress.log",
       btcaEnabled: true,
       btcaResources: ["svelte"],
     });

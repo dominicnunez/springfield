@@ -8,7 +8,7 @@ describe("parseArgs single task detection", () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), "sfs-args-"));
+    tempDir = mkdtempSync(join(tmpdir(), "sfk-args-"));
   });
 
   afterEach(() => {
@@ -16,17 +16,32 @@ describe("parseArgs single task detection", () => {
   });
 
   it("should treat non-directory positional arg as single task", () => {
-    const { options } = parseArgs(["node", "sfs", "add dark mode toggle"]);
+    const { command, options } = parseArgs(["node", "sfk", "add dark mode toggle"]);
+    expect(command).toBe("run");
     expect(options.singleTask).toBe("add dark mode toggle");
   });
 
   it("should not set singleTask for directory positional arg", () => {
-    const { options } = parseArgs(["node", "sfs", tempDir]);
+    const { command, options } = parseArgs(["node", "sfk", tempDir]);
+    expect(command).toBe("run");
     expect(options.singleTask).toBeUndefined();
   });
 
   it("should leave singleTask undefined when no positional args", () => {
-    const { options } = parseArgs(["node", "sfs"]);
+    const { command, options } = parseArgs(["node", "sfk"]);
+    expect(command).toBe("run");
     expect(options.singleTask).toBeUndefined();
+  });
+
+  it("should parse audit command", () => {
+    const { command, auditOptions } = parseArgs(["node", "sfk", "audit"]);
+    expect(command).toBe("audit");
+    expect(auditOptions.startStep).toBe("audit");
+  });
+
+  it("should parse audit command with step option", () => {
+    const { command, auditOptions } = parseArgs(["node", "sfk", "audit", "--step", "fix"]);
+    expect(command).toBe("audit");
+    expect(auditOptions.startStep).toBe("fix");
   });
 });
