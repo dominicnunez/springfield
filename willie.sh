@@ -33,13 +33,12 @@ done
 
 ITER=0
 
-# Read audit prompt from file
+# Audit prompt file path (read fresh each iteration)
 AUDIT_PROMPT_FILE="$PROJECT_DIR/audit-prompt.md"
 if [[ ! -f "$AUDIT_PROMPT_FILE" ]]; then
   echo "ERROR: $AUDIT_PROMPT_FILE not found. Create it first."
   exit 1
 fi
-AUDIT_PROMPT="$(cat "$AUDIT_PROMPT_FILE")"
 
 VALIDATE_PROMPT='Review and validate or invalidate each item in audit-report.md. Be thorough — actually read the code at every referenced file:line. Do not just trust the audit description.
 
@@ -71,7 +70,11 @@ run_claude() {
   log "Running step: $step_name (log: $log_file)"
   cd "$PROJECT_DIR"
 
-  script -q /dev/null -c "claude --model opus --dangerously-skip-permissions -p \"$prompt\"" > "$log_file" 2>&1
+  local prompt_file
+  prompt_file=$(mktemp)
+  printf '%s' "$prompt" > "$prompt_file"
+  WILLIE_PROMPT_FILE="$prompt_file" script -q /dev/null -c 'claude --model opus --dangerously-skip-permissions -p "$(cat "$WILLIE_PROMPT_FILE")"' 2>&1 | tee "$log_file"
+  rm -f "$prompt_file"
   local exit_code=$?
 
   if [[ $exit_code -ne 0 ]]; then
@@ -91,7 +94,9 @@ notify() {
 
 run_audit() {
   log "STEP 1: Running audit..."
-  run_claude "audit" "$AUDIT_PROMPT" || true
+  local audit_prompt
+  audit_prompt="$(cat "$AUDIT_PROMPT_FILE")"
+  run_claude "audit" "$audit_prompt" || true
 
   if [[ ! -f "$REPORT" ]]; then
     log "✅ No audit-report.md generated — codebase is clean!"
