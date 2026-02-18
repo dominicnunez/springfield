@@ -1,12 +1,15 @@
 import { spawnSync } from "node:child_process";
 import type { Engine, EngineResult } from "./base.js";
+import type { EffortLevel } from "../config/loader.js";
 
 export class ClaudeEngine implements Engine {
   name = "claude";
   model: string;
+  effort: EffortLevel;
 
-  constructor(model: string = "opus") {
+  constructor(model: string = "opus", effort: EffortLevel = "high") {
     this.model = model;
+    this.effort = effort;
   }
 
   isAvailable(): boolean {
@@ -17,6 +20,7 @@ export class ClaudeEngine implements Engine {
   async run(prompt: string): Promise<EngineResult> {
     const args = [
       "--model", this.model,
+      "--effort", this.effort,
       "--dangerously-skip-permissions",
       "-p", prompt,
     ];
@@ -25,12 +29,11 @@ export class ClaudeEngine implements Engine {
       encoding: "utf-8",
       cwd: process.cwd(),
       stdio: ["inherit", "pipe", "pipe"],
-      maxBuffer: 50 * 1024 * 1024, // 50MB buffer
+      maxBuffer: 50 * 1024 * 1024,
     });
 
     const output = (result.stdout || "") + (result.stderr || "");
-    
-    // Stream output to console
+
     if (result.stdout) {
       process.stdout.write(result.stdout);
     }
@@ -42,11 +45,10 @@ export class ClaudeEngine implements Engine {
       success: result.status === 0,
       output,
       exitCode: result.status ?? 1,
-      rateLimited: false, // Claude doesn't have fallback support in this implementation
+      rateLimited: false,
     };
   }
 
-  // Claude doesn't support fallback in this implementation
   switchToFallback(): boolean {
     return false;
   }

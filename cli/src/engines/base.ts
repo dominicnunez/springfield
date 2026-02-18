@@ -12,21 +12,9 @@ export interface EngineResult {
 export interface Engine {
   name: string;
   model: string;
-  
-  /**
-   * Check if the engine CLI is available
-   */
+
   isAvailable(): boolean;
-  
-  /**
-   * Run the engine with the given prompt
-   */
   run(prompt: string): Promise<EngineResult>;
-  
-  /**
-   * Switch to fallback model (if available)
-   * Returns true if switch was successful
-   */
   switchToFallback?(): boolean;
 }
 
@@ -45,9 +33,6 @@ export interface FixTestsPromptOptions {
   progressFile: string;
 }
 
-/**
- * Generate btca instructions if enabled
- */
 function generateBtcaInstructions(resources: string[]): string {
   if (resources.length === 0) {
     return `## Documentation Lookup (BTCA)
@@ -63,7 +48,7 @@ Check the docs before writing — don't rely on training data.`;
 
   const resourceList = resources.map(r => `@${r}`).join(", ");
   const exampleResource = resources[0];
-  
+
   return `## Documentation Lookup (BTCA)
 
 When working with code that uses these libraries, look up current APIs:
@@ -76,9 +61,19 @@ btca ask -r ${exampleResource} -q "how to do X"
 Check the docs before writing — don't rely on training data.`;
 }
 
-/**
- * Generate the standard prompt for Ralph
- */
+const TEST_QUALITY_RULES = `## Test Quality Rules
+
+Write tests that verify **behavior**, not implementation details:
+- **DO:** Test inputs → outputs, side effects, error handling, edge cases
+- **DON'T:** Test that a file exists, that a function is imported, that a component renders at all
+- **DON'T:** Write structural/reflection tests (e.g., checking method names exist via reflect)
+- **DON'T:** Create mocks that just return nil for everything — mocks should simulate real behavior
+- **DON'T:** Add random suffixes to test names (US1, US2, _US3, TestUS4)
+- **DO:** Use clear, descriptive test names: TestCalculateScore, TestCreateAppointment_DuplicateDate
+- **DO:** Assert on actual values, not just "no error returned"
+- **DO:** Test the interesting cases — conflicts, duplicates, empty inputs, boundaries
+- Keep test count proportional to complexity — don't write 20 tests for a simple CRUD function`;
+
 export function generatePrompt(options: PromptOptions): string {
   const { skipCommit, btcaEnabled, btcaResources, progressFile } = options;
   const commitInstructions = skipCommit
@@ -105,11 +100,13 @@ export function generatePrompt(options: PromptOptions): string {
 
 You MUST:
 - Create or modify a test file (e.g., *.test.ts, *.spec.ts)
-- Write at least one test for the feature you implement
+- Write tests for the feature you implement
 - Run the full test suite
 - Verify ALL tests pass before marking the task complete
 
 If you do not write tests, the task will be rejected and you must try again.
+
+${TEST_QUALITY_RULES}
 
 ## Only Complete If Tests Pass
 
@@ -147,9 +144,6 @@ After completing your task, check PRD.md:
 - If tasks remain [ ], just end your response (next iteration will continue)`;
 }
 
-/**
- * Generate prompt for single-task mode
- */
 export function generateSingleTaskPrompt(task: string, options: PromptOptions): string {
   const { skipCommit, btcaEnabled, btcaResources, progressFile } = options;
   const commitInstructions = skipCommit
@@ -186,11 +180,13 @@ Do NOT create or modify PRD.md on disk.
 
 You MUST:
 - Create or modify a test file (e.g., *.test.ts, *.spec.ts)
-- Write at least one test for the feature you implement
+- Write tests for the feature you implement
 - Run the full test suite
 - Verify ALL tests pass before marking the task complete
 
 If you do not write tests, the task will be rejected and you must try again.
+
+${TEST_QUALITY_RULES}
 
 ## Only Complete If Tests Pass
 
@@ -225,16 +221,12 @@ ${btcaEnabled ? `\n${generateBtcaInstructions(btcaResources || [])}` : ""}
 After completing your task, output exactly: ${COMPLETE_MARKER}`;
 }
 
-/**
- * Generate prompt for fixing failing tests
- */
 export function generateFixTestsPrompt(options: FixTestsPromptOptions): string {
   const { testOutput, skipCommit, progressFile } = options;
-  
-  // Truncate test output to last 100 lines
+
   const lines = testOutput.split("\n");
   const truncatedOutput = lines.slice(-100).join("\n");
-  
+
   const commitInstructions = skipCommit
     ? `- If tests PASS:
   - Update PRD.md to mark the task complete (change [ ] to [x])
@@ -290,3 +282,25 @@ After fixing and tests pass, check PRD.md:
 - If ALL tasks are [x], output exactly: ${COMPLETE_MARKER}
 - If tasks remain [ ], just end your response (next iteration will continue)`;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Willie (audit) prompts
+// ─────────────────────────────────────────────────────────────
+
+export const VALIDATE_PROMPT = `Review and validate or invalidate each item in audit-report.md. Be thorough — actually read the code at every referenced file:line. Do not just trust the audit description.
+
+Rules:
+1. Read the actual code at the referenced file:line
+2. Determine if the issue is real (valid) or a false positive (invalidate)
+3. Move any false positives to known-exceptions.md with a "date added" field and brief reasoning
+4. Remove invalidated items from audit-report.md
+5. If ALL items are invalidated, delete audit-report.md entirely`;
+
+export const FIX_PROMPT = `Fix the issues in audit-report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to known-exceptions.md.
+
+Rules:
+1. Do proper long-term fixes, not quick-fix bandaids
+2. Anything worth fixing later is valid and should be done now
+3. Anything truly acceptable/wont-fix: add to known-exceptions.md with date added and reasoning
+4. Semantically commit each fix with a descriptive message (push-after-commit is enabled)
+5. Delete audit-report.md when 100% resolved and push`;

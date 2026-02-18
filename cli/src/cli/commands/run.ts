@@ -1,11 +1,28 @@
 import { join, basename } from "node:path";
+import { existsSync, mkdirSync, renameSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import type { Config } from "../../config/loader.js";
-import { getCurrentModel } from "../../config/loader.js";
+import { getCurrentModel, getRalphModel, getRalphEffort } from "../../config/loader.js";
 import { ClaudeEngine } from "../../engines/claude.js";
 import { OpenCodeEngine } from "../../engines/opencode.js";
-import { COMPLETE_MARKER, generatePrompt, generateSingleTaskPrompt, generateFixTestsPrompt, type Engine } from "../../engines/base.js";
-import { parsePrd, getFirstIncompleteTask, countIncompleteTasks, allTasksComplete } from "../../tasks/parser.js";
-import { appendFailure, initProgress, getProgressFile } from "../../tasks/progress.js";
+import {
+  COMPLETE_MARKER,
+  generatePrompt,
+  generateSingleTaskPrompt,
+  generateFixTestsPrompt,
+  type Engine,
+} from "../../engines/base.js";
+import {
+  parsePrd,
+  getFirstIncompleteTask,
+  countIncompleteTasks,
+  allTasksComplete,
+} from "../../tasks/parser.js";
+import {
+  appendFailure,
+  initProgress,
+  getProgressFile,
+} from "../../tasks/progress.js";
 import { detectTestCommand, verify } from "../../tasks/verification.js";
 import {
   initLogger,
@@ -19,10 +36,14 @@ import {
 } from "../../ui/logger.js";
 import pc from "picocolors";
 
-/**
- * Handle soft rate limit with exponential backoff
- * Returns true if should retry, false if should give up
- */
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
+
+function sleep(seconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+}
+
 async function handleSoftRateLimit(
   attempt: number,
   maxRetries: number,
@@ -30,68 +51,189 @@ async function handleSoftRateLimit(
 ): Promise<boolean> {
   if (attempt >= maxRetries) {
     logWarning(`Soft rate limit: exhausted ${maxRetries} retries`);
-    console.log(`⚠️  Soft rate limit persisted after ${maxRetries} retries`);
+    console.log(
+      `  Soft rate limit persisted after ${maxRetries} retries`
+    );
     return false;
   }
 
-  // Exponential backoff: baseWait * 2^attempt (e.g., 30s, 60s, 120s)
   const waitTime = baseWait * Math.pow(2, attempt);
 
   console.log("");
-  console.log("───────────────────────────────────────────────────────────────");
-  console.log(`  ⏳ Soft rate limit detected (attempt ${attempt + 1}/${maxRetries})`);
+  console.log(
+    "───────────────────────────────────────────────────────────────"
+  );
+  console.log(
+    `  Soft rate limit detected (attempt ${attempt + 1}/${maxRetries})`
+  );
   console.log(`  Waiting ${waitTime}s before retry...`);
-  console.log("───────────────────────────────────────────────────────────────");
-  logInfo(`Soft rate limit: waiting ${waitTime}s (attempt ${attempt + 1}/${maxRetries})`);
+  console.log(
+    "───────────────────────────────────────────────────────────────"
+  );
+  logInfo(
+    `Soft rate limit: waiting ${waitTime}s (attempt ${attempt + 1}/${maxRetries})`
+  );
 
   await sleep(waitTime);
   return true;
 }
+
+function notify(message: string): void {
+  try {
+    const result = spawnSync("which", ["openclaw"], { encoding: "utf-8" });
+    if (result.status === 0) {
+      spawnSync("openclaw", ["cron", "wake", message], {
+        encoding: "utf-8",
+        stdio: "ignore",
+      });
+    }
+  } catch {
+    // openclaw not available, ignore
+  }
+}
+
+function pushAfterCommit(headBefore: string): void {
+  const headAfter = spawnSync("git", ["rev-parse", "HEAD"], {
+    encoding: "utf-8",
+  }).stdout.trim();
+
+  if (!headBefore || headBefore === headAfter) return;
+
+  logInfo("New commit detected, pushing to origin");
+  console.log("  Pushing changes to origin...");
+
+  const branch = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    encoding: "utf-8",
+  }).stdout.trim();
+
+  // Check if branch has upstream
+  const hasUpstream = spawnSync(
+    "git",
+    ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+    { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+  );
+
+  const pushArgs =
+    hasUpstream.status === 0
+      ? ["push"]
+      : ["push", "-u", "origin", branch];
+
+  const pushResult = spawnSync("git", pushArgs, {
+    encoding: "utf-8",
+    stdio: ["inherit", "pipe", "pipe"],
+  });
+
+  if (pushResult.status === 0) {
+    logInfo("Push successful");
+    console.log(`  Pushed to origin/${branch}`);
+  } else {
+    logWarning("Push failed (will retry next iteration)");
+    console.log("  Push failed (will retry next iteration)");
+  }
+}
+
+function archivePrd(prdPath: string): void {
+  if (!existsSync(prdPath)) return;
+
+  const archiveDir = "completed-prds";
+  if (!existsSync(archiveDir)) {
+    mkdirSync(archiveDir, { recursive: true });
+  }
+
+  const now = new Date();
+  const timestamp = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+    "-",
+    String(now.getHours()).padStart(2, "0"),
+    String(now.getMinutes()).padStart(2, "0"),
+    String(now.getSeconds()).padStart(2, "0"),
+  ].join("");
+
+  // Extract title from first heading
+  const content = readFileSync(prdPath, "utf-8");
+  const firstLine = content.split("\n")[0] || "";
+  const titleRaw = firstLine
+    .replace(/^#+\s*/, "")
+    .split(/\s+/)
+    .slice(0, 3)
+    .join("-")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-");
+
+  const archiveName = titleRaw
+    ? `${timestamp}-${titleRaw}.md`
+    : `${timestamp}-prd.md`;
+
+  renameSync(prdPath, join(archiveDir, archiveName));
+  logInfo(`Archived PRD to completed-prds/${archiveName}`);
+  console.log(`  Archived: completed-prds/${archiveName}`);
+}
+
+function getHeadSha(): string {
+  return spawnSync("git", ["rev-parse", "HEAD"], {
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "pipe"],
+  }).stdout.trim();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Engine factory
+// ─────────────────────────────────────────────────────────────
+
+function createEngine(config: Config): Engine {
+  if (config.engine === "claude") {
+    return new ClaudeEngine(getRalphModel(config), getRalphEffort(config));
+  }
+  return new OpenCodeEngine(config.ocPrimeModel, config.ocFallModel);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Run loop
+// ─────────────────────────────────────────────────────────────
 
 export interface RunOptions {
   prdPath: string;
   verbose?: boolean;
 }
 
-function sleep(seconds: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, seconds * 1000));
-}
-
-export async function runLoop(config: Config, options: RunOptions): Promise<void> {
+export async function runLoop(
+  config: Config,
+  options: RunOptions
+): Promise<void> {
   const projectName = basename(process.cwd());
   const logFile = join(config.logDir, `ralph-${projectName}.log`);
   const progressFile = getProgressFile(projectName, config.progressDir);
-  
-  // Initialize
+
   initLogger({ logFile, verbose: options.verbose });
   initProgress(config.progressDir, progressFile);
-  
-  // Create engine
-  const engine: Engine = config.engine === "claude"
-    ? new ClaudeEngine(config.claudeModel)
-    : new OpenCodeEngine(config.ocPrimeModel, config.ocFallModel);
 
-  // Verify engine is available
+  const engine = createEngine(config);
+
   if (!engine.isAvailable()) {
-    logError(`'${engine.name}' command not found. Please install ${engine.name === "claude" ? "Claude CLI" : "OpenCode CLI"}.`);
+    logError(
+      `'${engine.name}' command not found. Please install ${engine.name === "claude" ? "Claude CLI" : "OpenCode CLI"}.`
+    );
     process.exit(1);
   }
 
-  // Detect test command
   const testCmd = config.testCmd || detectTestCommand();
-  
-  // Log session start
+
   logSessionStart(projectName, config.engine, getCurrentModel(config));
-  
-  // Print startup info
-  const iterStr = config.maxIterations === -1 ? "Infinite mode" : `Max ${config.maxIterations} iterations`;
+
+  const iterStr =
+    config.maxIterations === -1
+      ? "Infinite mode"
+      : `Max ${config.maxIterations} iterations`;
   console.log(`Starting Ralph (${config.engine}) - ${iterStr}`);
   console.log(`Using model: ${getCurrentModel(config)}`);
-  
+
   if (config.engine === "opencode" && config.ocFallModel) {
     console.log(`Fallback model: ${config.ocFallModel}`);
   }
-  
+
   if (config.skipCommit) {
     console.log("Commits disabled for this run");
   }
@@ -103,22 +245,33 @@ export async function runLoop(config: Config, options: RunOptions): Promise<void
     console.log(`  Test command: ${testCmd}`);
     logInfo(`Test command: ${testCmd}`);
   } else {
-    console.log(pc.yellow("  No test command detected (configure TEST_CMD in ralph.env)"));
+    console.log(
+      pc.yellow(
+        "  No test command detected (configure test-cmd in .sfk/config)"
+      )
+    );
     logWarning("No test command detected");
   }
 
   console.log(`  Log file: ${logFile}`);
   console.log("");
 
-  // Generate prompt
   const prompt = generatePrompt({
     skipCommit: config.skipCommit,
     btcaEnabled: config.btcaEnabled,
     btcaResources: config.btcaResources,
     progressFile,
   });
-  
-  // Main loop
+
+  // Signal handling
+  let interrupted = false;
+  const signalHandler = (signal: string) => {
+    logWarning(`Received signal: ${signal}`);
+    interrupted = true;
+  };
+  process.on("SIGINT", () => signalHandler("SIGINT"));
+  process.on("SIGTERM", () => signalHandler("SIGTERM"));
+
   let iteration = 0;
   let consecutiveFailures = 0;
   let softLimitRetries = 0;
@@ -127,87 +280,107 @@ export async function runLoop(config: Config, options: RunOptions): Promise<void
   let lastTestOutput = "";
 
   while (config.maxIterations === -1 || iteration < config.maxIterations) {
+    if (interrupted) {
+      logWarning(`Interrupted at iteration ${iteration}`);
+      console.log(pc.yellow("\n  Interrupted. Exiting gracefully."));
+      process.exit(130);
+    }
+
     iteration++;
-    
-    // Parse PRD and get current task
+
+    // Check PRD exists
+    if (!existsSync(options.prdPath)) {
+      logWarning(`${options.prdPath} not found, exiting`);
+      console.log(pc.yellow(`  ${options.prdPath} not found. Exiting.`));
+      process.exit(1);
+    }
+
     const tasks = parsePrd(options.prdPath);
     const currentTask = getFirstIncompleteTask(tasks);
     const taskName = currentTask?.text || "unknown";
-    
-    // Check if already complete
+
     if (allTasksComplete(tasks) && tasks.length > 0) {
       logSuccess("All tasks already complete!");
       console.log(pc.green("==========================================="));
       console.log(pc.green("  All tasks already complete!"));
       console.log(pc.green("==========================================="));
+
+      archivePrd(options.prdPath);
+      notify(
+        `Ralph finished ${projectName} — all tasks already complete.`
+      );
       process.exit(0);
     }
 
-    // Log iteration with fix mode indicator
+    // Save HEAD before iteration for push detection
+    const headBefore = getHeadSha();
+
     logIteration(iteration, config.maxIterations, taskName, engine.model);
     if (testFailureMode) {
       console.log(pc.yellow("  Mode: FIX TESTS"));
     }
 
-    // Get the appropriate prompt (normal or fix-tests)
-    const currentPrompt = testFailureMode && lastTestOutput
-      ? generateFixTestsPrompt({
-          testOutput: lastTestOutput,
-          skipCommit: config.skipCommit,
-          progressFile,
-        })
-      : prompt;
+    const currentPrompt =
+      testFailureMode && lastTestOutput
+        ? generateFixTestsPrompt({
+            testOutput: lastTestOutput,
+            skipCommit: config.skipCommit,
+            progressFile,
+          })
+        : prompt;
 
-    // Run engine
     const result = await engine.run(currentPrompt);
     logAiOutput(result.output);
     console.log("");
 
-    // Handle rate limits (OpenCode only) - hard vs soft distinction
+    // Rate limit handling (OpenCode only)
     if (config.engine === "opencode") {
-      // Hard rate limit: quota/billing - immediate fallback
       if (result.hardRateLimited) {
         logWarning("Hard rate limit detected (quota/billing)");
-        console.log("🚫 Hard rate limit: quota or billing issue");
-        softLimitRetries = 0; // Reset soft counter
+        console.log("  Hard rate limit: quota or billing issue");
+        softLimitRetries = 0;
 
         if (engine.switchToFallback?.()) {
           iteration--;
           continue;
         } else {
           logError("Hard rate limit and no fallback available");
-          console.log("❌ Hard rate limit and no fallback available");
+          console.log("  Hard rate limit and no fallback available");
           process.exit(1);
         }
       }
 
-      // Soft rate limit: temporary cooldown - retry first
       if (result.softRateLimited) {
         logWarning("Soft rate limit detected (temporary cooldown)");
-        
-        if (await handleSoftRateLimit(softLimitRetries, config.softLimitRetries, config.softLimitWait)) {
+
+        if (
+          await handleSoftRateLimit(
+            softLimitRetries,
+            config.softLimitRetries,
+            config.softLimitWait
+          )
+        ) {
           softLimitRetries++;
-          iteration--; // Retry same iteration
+          iteration--;
           continue;
         } else {
-          // Retries exhausted, try fallback
           softLimitRetries = 0;
           if (engine.switchToFallback?.()) {
             iteration--;
             continue;
           } else {
             logError("Soft rate limit persisted, no fallback available");
-            console.log("❌ Rate limit persisted after retries, no fallback available");
+            console.log(
+              "  Rate limit persisted after retries, no fallback available"
+            );
             process.exit(1);
           }
         }
       }
 
-      // Reset soft limit counter on successful iteration
       softLimitRetries = 0;
     }
 
-    // Handle non-rate-limit errors
     if (!result.success) {
       logError(`${engine.name} failed with exit code ${result.exitCode}`);
       process.exit(result.exitCode);
@@ -216,9 +389,8 @@ export async function runLoop(config: Config, options: RunOptions): Promise<void
     // Test verification gate
     if (!config.skipTestVerify && testCmd) {
       const verification = verify(testCmd);
-      
+
       if (!verification.testsWritten) {
-        // Only increment if same task is failing
         if (taskName !== lastFailedTask) {
           consecutiveFailures = 1;
           lastFailedTask = taskName;
@@ -226,9 +398,11 @@ export async function runLoop(config: Config, options: RunOptions): Promise<void
         } else {
           consecutiveFailures++;
         }
-        
-        logWarning(`No tests written, iteration failed (${consecutiveFailures}/${config.maxConsecutiveFailures})`);
-        
+
+        logWarning(
+          `No tests written, iteration failed (${consecutiveFailures}/${config.maxConsecutiveFailures})`
+        );
+
         appendFailure(
           progressFile,
           iteration,
@@ -237,21 +411,26 @@ export async function runLoop(config: Config, options: RunOptions): Promise<void
         );
 
         if (consecutiveFailures >= config.maxConsecutiveFailures) {
-          logError(`Too many consecutive failures on task '${taskName}', stopping`);
-          console.log(pc.red("  Too many consecutive failures on this task"));
+          logError(
+            `Too many consecutive failures on task '${taskName}', stopping`
+          );
+          console.log(
+            pc.red("  Too many consecutive failures on this task")
+          );
           console.log(pc.red("  Manual intervention required"));
           console.log(`  Check log: ${logFile}`);
           process.exit(1);
         }
 
-        console.log(`  Verification failed (${consecutiveFailures}/${config.maxConsecutiveFailures})`);
+        console.log(
+          `  Verification failed (${consecutiveFailures}/${config.maxConsecutiveFailures})`
+        );
         console.log("  Continuing to next iteration to fix...");
         await sleep(config.sleepSeconds);
         continue;
       }
 
       if (!verification.testsPassed) {
-        // Only increment if same task is failing
         if (taskName !== lastFailedTask) {
           consecutiveFailures = 1;
           lastFailedTask = taskName;
@@ -259,13 +438,14 @@ export async function runLoop(config: Config, options: RunOptions): Promise<void
         } else {
           consecutiveFailures++;
         }
-        
-        logWarning(`Tests failed, iteration failed (${consecutiveFailures}/${config.maxConsecutiveFailures})`);
-        
-        // Set test failure mode and capture test output
+
+        logWarning(
+          `Tests failed, iteration failed (${consecutiveFailures}/${config.maxConsecutiveFailures})`
+        );
+
         testFailureMode = true;
         lastTestOutput = verification.testOutput || "";
-        
+
         appendFailure(
           progressFile,
           iteration,
@@ -275,21 +455,30 @@ export async function runLoop(config: Config, options: RunOptions): Promise<void
         );
 
         if (consecutiveFailures >= config.maxConsecutiveFailures) {
-          logError(`Too many consecutive failures on task '${taskName}', stopping`);
-          console.log(pc.red("  Too many consecutive failures on this task"));
+          logError(
+            `Too many consecutive failures on task '${taskName}', stopping`
+          );
+          console.log(
+            pc.red("  Too many consecutive failures on this task")
+          );
           console.log(pc.red("  Manual intervention required"));
           console.log(`  Check log: ${logFile}`);
           process.exit(1);
         }
 
-        console.log(`  Verification failed (${consecutiveFailures}/${config.maxConsecutiveFailures})`);
+        console.log(
+          `  Verification failed (${consecutiveFailures}/${config.maxConsecutiveFailures})`
+        );
         console.log("  Continuing to next iteration to fix...");
-        console.log(pc.yellow("  Next iteration will use fix-tests prompt with test output"));
+        console.log(
+          pc.yellow(
+            "  Next iteration will use fix-tests prompt with test output"
+          )
+        );
         await sleep(config.sleepSeconds);
         continue;
       }
 
-      // Reset failure counter and test failure mode on success
       consecutiveFailures = 0;
       lastFailedTask = "";
       testFailureMode = false;
@@ -297,17 +486,27 @@ export async function runLoop(config: Config, options: RunOptions): Promise<void
       logInfo("Verification passed");
     }
 
-    // Check for completion marker
+    // Push after commit
+    if (config.pushAfterCommit && !config.skipCommit) {
+      pushAfterCommit(headBefore);
+    }
+
+    // Completion check
     if (result.output.includes(COMPLETE_MARKER)) {
-      // Re-parse PRD to verify
       const finalTasks = parsePrd(options.prdPath);
       const remainingCount = countIncompleteTasks(finalTasks);
 
       if (remainingCount > 0) {
-        logWarning(`AI claimed complete but ${remainingCount} tasks remain`);
+        logWarning(
+          `AI claimed complete but ${remainingCount} tasks remain`
+        );
         console.log("");
         console.log(pc.yellow("==========================================="));
-        console.log(pc.yellow(`  AI claimed complete but ${remainingCount} tasks remain`));
+        console.log(
+          pc.yellow(
+            `  AI claimed complete but ${remainingCount} tasks remain`
+          )
+        );
         console.log(pc.yellow("  Continuing to next iteration..."));
         console.log(pc.yellow("==========================================="));
         await sleep(config.sleepSeconds);
@@ -319,7 +518,7 @@ export async function runLoop(config: Config, options: RunOptions): Promise<void
         console.log("");
         console.log("  Final verification: running full test suite...");
         const finalVerification = verify(testCmd);
-        
+
         if (!finalVerification.testsPassed) {
           logError("Final verification failed");
           console.log("");
@@ -335,10 +534,46 @@ export async function runLoop(config: Config, options: RunOptions): Promise<void
       // Success!
       logSuccess("All tasks completed successfully!");
       console.log(pc.green("==========================================="));
-      console.log(pc.green(`  All tasks complete after ${iteration} iterations!`));
+      console.log(
+        pc.green(`  All tasks complete after ${iteration} iterations!`)
+      );
       console.log(pc.green("  All tests passing!"));
       console.log(`  Log: ${logFile}`);
       console.log(pc.green("==========================================="));
+
+      archivePrd(options.prdPath);
+      notify(
+        `Ralph finished ${projectName} — all tasks complete after ${iteration} iterations. All tests passing.`
+      );
+
+      // Chain to willie audit if configured
+      if (config.auditAfterComplete) {
+        const auditPromptPath = config.willieAuditPrompt;
+        if (existsSync(auditPromptPath)) {
+          console.log("");
+          console.log(
+            pc.cyan("  Starting willie audit loop...")
+          );
+          // Dynamic import to avoid circular dependency at module load
+          const { auditLoop } = await import("./audit.js");
+          await auditLoop(config, {
+            startStep: "audit",
+            maxIterations: config.willieMaxIterations,
+            auditPromptPath,
+            verbose: options.verbose,
+          });
+        } else {
+          logWarning(
+            `audit-after-complete enabled but ${auditPromptPath} not found, skipping audit`
+          );
+          console.log(
+            pc.yellow(
+              `  audit-after-complete enabled but ${auditPromptPath} not found`
+            )
+          );
+        }
+      }
+
       process.exit(0);
     }
 
@@ -348,11 +583,22 @@ export async function runLoop(config: Config, options: RunOptions): Promise<void
   // Max iterations reached
   logWarning(`Reached max iterations (${config.maxIterations})`);
   console.log(pc.yellow("==========================================="));
-  console.log(pc.yellow(`  Reached max iterations (${config.maxIterations})`));
+  console.log(
+    pc.yellow(`  Reached max iterations (${config.maxIterations})`)
+  );
   console.log(`  Log: ${logFile}`);
   console.log(pc.yellow("==========================================="));
+
+  notify(
+    `Ralph hit max iterations (${config.maxIterations}) on ${projectName} — tasks remain incomplete.`
+  );
+
   process.exit(1);
 }
+
+// ─────────────────────────────────────────────────────────────
+// Single task mode
+// ─────────────────────────────────────────────────────────────
 
 export async function runSingleTask(
   config: Config,
@@ -364,31 +610,24 @@ export async function runSingleTask(
   const logFile = join(config.logDir, `ralph-${projectName}.log`);
   const progressFile = getProgressFile(projectName, config.progressDir);
 
-  // Initialize
   initLogger({ logFile, verbose: options.verbose });
   initProgress(config.progressDir, progressFile);
 
-  // Create engine
-  const engine: Engine = engineOverride ?? (
-    config.engine === "claude"
-      ? new ClaudeEngine(config.claudeModel)
-      : new OpenCodeEngine(config.ocPrimeModel, config.ocFallModel)
-  );
+  const engine: Engine =
+    engineOverride ?? createEngine(config);
 
-  // Verify engine is available
   if (!engine.isAvailable()) {
-    logError(`'${engine.name}' command not found. Please install ${engine.name === "claude" ? "Claude CLI" : "OpenCode CLI"}.`);
+    logError(
+      `'${engine.name}' command not found. Please install ${engine.name === "claude" ? "Claude CLI" : "OpenCode CLI"}.`
+    );
     process.exitCode = 1;
     return;
   }
 
-  // Detect test command
   const testCmd = config.testCmd || detectTestCommand();
 
-  // Log session start
   logSessionStart(projectName, config.engine, getCurrentModel(config));
 
-  // Print startup info
   console.log(`Starting Ralph (${config.engine}) - Single task mode`);
   console.log(`Using model: ${getCurrentModel(config)}`);
 
@@ -407,14 +646,17 @@ export async function runSingleTask(
     console.log(`  Test command: ${testCmd}`);
     logInfo(`Test command: ${testCmd}`);
   } else {
-    console.log(pc.yellow("  No test command detected (configure TEST_CMD in ralph.env)"));
+    console.log(
+      pc.yellow(
+        "  No test command detected (configure test-cmd in .sfk/config)"
+      )
+    );
     logWarning("No test command detected");
   }
 
   console.log(`  Log file: ${logFile}`);
   console.log("");
 
-  // Generate prompt
   const prompt = generateSingleTaskPrompt(task, {
     skipCommit: config.skipCommit,
     btcaEnabled: config.btcaEnabled,
@@ -422,21 +664,21 @@ export async function runSingleTask(
     progressFile,
   });
 
-  // Log iteration
   logIteration(1, 1, task, engine.model);
 
-  // Run engine with rate limit handling
   let result = await engine.run(prompt);
   logAiOutput(result.output);
   console.log("");
 
-  // Handle rate limits (OpenCode only)
-  if (config.engine === "opencode" && (result.hardRateLimited || result.softRateLimited)) {
-    let softLimitRetries = 0;
+  // Rate limit handling (OpenCode only)
+  if (
+    config.engine === "opencode" &&
+    (result.hardRateLimited || result.softRateLimited)
+  ) {
+    let softRetries = 0;
 
     while (result.softRateLimited || result.hardRateLimited) {
       if (result.hardRateLimited) {
-        // Hard rate limit: immediate fallback
         logWarning("Hard rate limit detected (quota/billing)");
         if (engine.switchToFallback?.()) {
           result = await engine.run(prompt);
@@ -451,14 +693,18 @@ export async function runSingleTask(
       }
 
       if (result.softRateLimited) {
-        // Soft rate limit: retry with backoff
-        if (await handleSoftRateLimit(softLimitRetries, config.softLimitRetries, config.softLimitWait)) {
-          softLimitRetries++;
+        if (
+          await handleSoftRateLimit(
+            softRetries,
+            config.softLimitRetries,
+            config.softLimitWait
+          )
+        ) {
+          softRetries++;
           result = await engine.run(prompt);
           logAiOutput(result.output);
           console.log("");
         } else {
-          // Retries exhausted, try fallback
           if (engine.switchToFallback?.()) {
             result = await engine.run(prompt);
             logAiOutput(result.output);
