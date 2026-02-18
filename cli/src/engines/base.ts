@@ -22,8 +22,6 @@ export const COMPLETE_MARKER = "<promise>COMPLETE</promise>";
 
 export interface PromptOptions {
   skipCommit: boolean;
-  btcaEnabled?: boolean;
-  btcaResources?: string[];
   progressFile: string;
 }
 
@@ -31,34 +29,6 @@ export interface FixTestsPromptOptions {
   testOutput: string;
   skipCommit: boolean;
   progressFile: string;
-}
-
-function generateBtcaInstructions(resources: string[]): string {
-  if (resources.length === 0) {
-    return `## Documentation Lookup (BTCA)
-
-When working with external libraries or frameworks, look up current APIs before writing code:
-
-\`\`\`bash
-btca ask -r <resource> -q "your question"
-\`\`\`
-
-Check the docs before writing — don't rely on training data.`;
-  }
-
-  const resourceList = resources.map(r => `@${r}`).join(", ");
-  const exampleResource = resources[0];
-
-  return `## Documentation Lookup (BTCA)
-
-When working with code that uses these libraries, look up current APIs:
-${resourceList}
-
-\`\`\`bash
-btca ask -r ${exampleResource} -q "how to do X"
-\`\`\`
-
-Check the docs before writing — don't rely on training data.`;
 }
 
 const TEST_QUALITY_RULES = `## Test Quality Rules
@@ -75,7 +45,7 @@ Write tests that verify **behavior**, not implementation details:
 - Keep test count proportional to complexity — don't write 20 tests for a simple CRUD function`;
 
 export function generatePrompt(options: PromptOptions): string {
-  const { skipCommit, btcaEnabled, btcaResources, progressFile } = options;
+  const { skipCommit, progressFile } = options;
   const commitInstructions = skipCommit
     ? `- If tests PASS:
   - Update PRD.md to mark the task complete (change [ ] to [x])
@@ -136,7 +106,7 @@ If you discover a reusable pattern that future work should know about:
 - Check if AGENTS.md exists in the project root
 - Add patterns like: 'This codebase uses X for Y' or 'Always do Z when changing W'
 - Only add genuinely reusable knowledge, not task-specific details
-${btcaEnabled ? `\n${generateBtcaInstructions(btcaResources || [])}` : ""}
+
 ## End Condition
 
 After completing your task, check PRD.md:
@@ -145,7 +115,7 @@ After completing your task, check PRD.md:
 }
 
 export function generateSingleTaskPrompt(task: string, options: PromptOptions): string {
-  const { skipCommit, btcaEnabled, btcaResources, progressFile } = options;
+  const { skipCommit, progressFile } = options;
   const commitInstructions = skipCommit
     ? `- If tests PASS:
   - Do NOT update PRD.md (single-task mode)
@@ -215,7 +185,7 @@ If you discover a reusable pattern that future work should know about:
 - Check if AGENTS.md exists in the project root
 - Add patterns like: 'This codebase uses X for Y' or 'Always do Z when changing W'
 - Only add genuinely reusable knowledge, not task-specific details
-${btcaEnabled ? `\n${generateBtcaInstructions(btcaResources || [])}` : ""}
+
 ## End Condition
 
 After completing your task, output exactly: ${COMPLETE_MARKER}`;
@@ -287,20 +257,40 @@ After fixing and tests pass, check PRD.md:
 // Willie (audit) prompts
 // ─────────────────────────────────────────────────────────────
 
-export const VALIDATE_PROMPT = `Review and validate or invalidate each item in audit-report.md. Be thorough — actually read the code at every referenced file:line. Do not just trust the audit description.
+export const DEFAULT_AUDIT_PROMPT = `Audit this codebase for security vulnerabilities, bugs, performance issues, and code quality problems.
+
+Rules:
+1. Read the project structure and key source files thoroughly
+2. Check for: injection flaws, auth issues, data exposure, misconfigurations, error handling gaps, race conditions, resource leaks, and logic errors
+3. Check audit/exceptions.md — do not re-flag items already listed there
+4. Write findings to audit/report.md using this format for each finding:
+
+### [Category] Brief description
+- **Severity**: Critical / High / Medium / Low
+- **File**: path/to/file:line
+- **Details**: What the issue is and why it matters
+- **Suggested fix**: How to resolve it
+
+Categories: Security, Bug, Performance, Code Quality, Error Handling, Configuration
+
+5. If no issues found, do not create audit/report.md`;
+
+export const VALIDATE_PROMPT = `Review and validate or invalidate each item in audit/report.md. Be thorough — actually read the code at every referenced file:line. Do not just trust the audit description.
 
 Rules:
 1. Read the actual code at the referenced file:line
 2. Determine if the issue is real (valid) or a false positive (invalidate)
-3. Move any false positives to known-exceptions.md with a "date added" field and brief reasoning
-4. Remove invalidated items from audit-report.md
-5. If ALL items are invalidated, delete audit-report.md entirely`;
+3. Move any false positives to audit/exceptions.md with a "date added" field and brief reasoning
+4. Remove invalidated items from audit/report.md
+5. If ALL items are invalidated, delete audit/report.md entirely
+6. Do not reference finding IDs or category labels in commit messages`;
 
-export const FIX_PROMPT = `Fix the issues in audit-report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to known-exceptions.md.
+export const FIX_PROMPT = `Fix the issues in audit/report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to audit/exceptions.md.
 
 Rules:
 1. Do proper long-term fixes, not quick-fix bandaids
 2. Anything worth fixing later is valid and should be done now
-3. Anything truly acceptable/wont-fix: add to known-exceptions.md with date added and reasoning
+3. Anything truly acceptable/wont-fix: add to audit/exceptions.md with date added and reasoning
 4. Semantically commit each fix with a descriptive message (push-after-commit is enabled)
-5. Delete audit-report.md when 100% resolved and push`;
+5. Write commit messages as a developer would — describe what you fixed and why. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
+6. Delete audit/report.md when 100% resolved and push`;

@@ -1,5 +1,5 @@
 import { join, basename } from "node:path";
-import { existsSync, mkdirSync, renameSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import type { Config } from "../../config/loader.js";
 import { getCurrentModel, getRalphModel, getRalphEffort } from "../../config/loader.js";
@@ -132,46 +132,6 @@ function pushAfterCommit(headBefore: string): void {
   }
 }
 
-function archivePrd(prdPath: string): void {
-  if (!existsSync(prdPath)) return;
-
-  const archiveDir = "completed-prds";
-  if (!existsSync(archiveDir)) {
-    mkdirSync(archiveDir, { recursive: true });
-  }
-
-  const now = new Date();
-  const timestamp = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-    "-",
-    String(now.getHours()).padStart(2, "0"),
-    String(now.getMinutes()).padStart(2, "0"),
-    String(now.getSeconds()).padStart(2, "0"),
-  ].join("");
-
-  // Extract title from first heading
-  const content = readFileSync(prdPath, "utf-8");
-  const firstLine = content.split("\n")[0] || "";
-  const titleRaw = firstLine
-    .replace(/^#+\s*/, "")
-    .split(/\s+/)
-    .slice(0, 3)
-    .join("-")
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "")
-    .replace(/-+/g, "-");
-
-  const archiveName = titleRaw
-    ? `${timestamp}-${titleRaw}.md`
-    : `${timestamp}-prd.md`;
-
-  renameSync(prdPath, join(archiveDir, archiveName));
-  logInfo(`Archived PRD to completed-prds/${archiveName}`);
-  console.log(`  Archived: completed-prds/${archiveName}`);
-}
-
 function getHeadSha(): string {
   return spawnSync("git", ["rev-parse", "HEAD"], {
     encoding: "utf-8",
@@ -258,8 +218,6 @@ export async function runLoop(
 
   const prompt = generatePrompt({
     skipCommit: config.skipCommit,
-    btcaEnabled: config.btcaEnabled,
-    btcaResources: config.btcaResources,
     progressFile,
   });
 
@@ -305,7 +263,7 @@ export async function runLoop(
       console.log(pc.green("  All tasks already complete!"));
       console.log(pc.green("==========================================="));
 
-      archivePrd(options.prdPath);
+      unlinkSync(options.prdPath);
       notify(
         `Ralph finished ${projectName} — all tasks already complete.`
       );
@@ -541,37 +499,25 @@ export async function runLoop(
       console.log(`  Log: ${logFile}`);
       console.log(pc.green("==========================================="));
 
-      archivePrd(options.prdPath);
+      unlinkSync(options.prdPath);
       notify(
         `Ralph finished ${projectName} — all tasks complete after ${iteration} iterations. All tests passing.`
       );
 
       // Chain to willie audit if configured
       if (config.auditAfterComplete) {
-        const auditPromptPath = config.willieAuditPrompt;
-        if (existsSync(auditPromptPath)) {
-          console.log("");
-          console.log(
-            pc.cyan("  Starting willie audit loop...")
-          );
-          // Dynamic import to avoid circular dependency at module load
-          const { auditLoop } = await import("./audit.js");
-          await auditLoop(config, {
-            startStep: "audit",
-            maxIterations: config.willieMaxIterations,
-            auditPromptPath,
-            verbose: options.verbose,
-          });
-        } else {
-          logWarning(
-            `audit-after-complete enabled but ${auditPromptPath} not found, skipping audit`
-          );
-          console.log(
-            pc.yellow(
-              `  audit-after-complete enabled but ${auditPromptPath} not found`
-            )
-          );
-        }
+        console.log("");
+        console.log(
+          pc.cyan("  Starting willie audit loop...")
+        );
+        // Dynamic import to avoid circular dependency at module load
+        const { auditLoop } = await import("./audit.js");
+        await auditLoop(config, {
+          startStep: "audit",
+          maxIterations: config.willieMaxIterations,
+          auditPromptPath: config.willieAuditPrompt,
+          verbose: options.verbose,
+        });
       }
 
       process.exit(0);
@@ -659,8 +605,6 @@ export async function runSingleTask(
 
   const prompt = generateSingleTaskPrompt(task, {
     skipCommit: config.skipCommit,
-    btcaEnabled: config.btcaEnabled,
-    btcaResources: config.btcaResources,
     progressFile,
   });
 

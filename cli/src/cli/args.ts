@@ -104,7 +104,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     .description("Run the willie audit loop")
     .option("--step <step>", "Start from step: audit, validate, or fix", "audit")
     .option("--max-iterations <n>", "Maximum audit iterations (0 = unlimited)", parseInt)
-    .option("--audit-prompt <path>", "Path to audit-prompt.md")
+    .option("--audit-prompt <path>", "Path to custom audit prompt file")
     .option("-v, --verbose", "Enable verbose output")
     .action((opts) => {
       resolvedCommand = "audit";

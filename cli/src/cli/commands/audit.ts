@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from "
 import type { Config } from "../../config/loader.js";
 import { getWillieModel, getWillieEffort } from "../../config/loader.js";
 import { ClaudeEngine } from "../../engines/claude.js";
-import { VALIDATE_PROMPT, FIX_PROMPT, type Engine } from "../../engines/base.js";
+import { DEFAULT_AUDIT_PROMPT, VALIDATE_PROMPT, FIX_PROMPT, type Engine } from "../../engines/base.js";
 import {
   initLogger,
   logInfo,
@@ -14,6 +14,7 @@ import {
 import pc from "picocolors";
 import { spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
+import { homedir } from "node:os";
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -24,7 +25,7 @@ export type AuditStep = "audit" | "validate" | "fix";
 export interface AuditOptions {
   startStep: AuditStep;
   maxIterations: number; // 0 = unlimited
-  auditPromptPath: string;
+  auditPromptPath: string | undefined;
   verbose?: boolean;
 }
 
@@ -32,10 +33,11 @@ export interface AuditOptions {
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-const REPORT_FILE = "audit-report.md";
-const EXCEPTIONS_FILE = "known-exceptions.md";
+const AUDIT_DIR = "audit";
+const REPORT_FILE = join(AUDIT_DIR, "report.md");
+const EXCEPTIONS_FILE = join(AUDIT_DIR, "exceptions.md");
 
-const KNOWN_EXCEPTIONS_TEMPLATE = `# Known Exceptions
+const EXCEPTIONS_TEMPLATE = `# Audit Exceptions
 
 > Items validated as false positives or accepted as won't-fix.
 > Managed by willie audit loop. Do not edit format manually.
@@ -74,10 +76,13 @@ function countFindings(reportPath: string): number {
   return matches ? matches.length : 0;
 }
 
-function ensureKnownExceptions(): void {
+function ensureAuditDir(): void {
+  if (!existsSync(AUDIT_DIR)) {
+    mkdirSync(AUDIT_DIR, { recursive: true });
+  }
   if (!existsSync(EXCEPTIONS_FILE)) {
-    writeFileSync(EXCEPTIONS_FILE, KNOWN_EXCEPTIONS_TEMPLATE);
-    logInfo("Created known-exceptions.md template");
+    writeFileSync(EXCEPTIONS_FILE, EXCEPTIONS_TEMPLATE);
+    logInfo("Created audit/exceptions.md template");
   }
 }
 
@@ -86,20 +91,42 @@ function logToFile(logDir: string, iter: number, step: string, output: string): 
   appendFileSync(logFile, output);
 }
 
+interface ResolvedPrompt {
+  text: string;
+  source: string;
+}
+
+function resolveAuditPrompt(auditPromptPath: string | undefined): ResolvedPrompt {
+  if (auditPromptPath && existsSync(auditPromptPath)) {
+    return { text: readFileSync(auditPromptPath, "utf-8"), source: auditPromptPath };
+  }
+
+  const projectPrompt = join(AUDIT_DIR, "prompt.md");
+  if (existsSync(projectPrompt)) {
+    return { text: readFileSync(projectPrompt, "utf-8"), source: projectPrompt };
+  }
+
+  const globalPrompt = join(homedir(), ".config", "sfk", "audit-prompt.md");
+  if (existsSync(globalPrompt)) {
+    return { text: readFileSync(globalPrompt, "utf-8"), source: globalPrompt };
+  }
+
+  return { text: DEFAULT_AUDIT_PROMPT, source: "built-in default" };
+}
+
 // ─────────────────────────────────────────────────────────────
 // Steps
 // ─────────────────────────────────────────────────────────────
 
 async function runAuditStep(
   engine: Engine,
-  auditPromptPath: string,
+  auditPrompt: string,
   logDir: string,
   iter: number
 ): Promise<boolean> {
   logInfo("STEP 1: Running audit...");
   console.log(pc.cyan("  Step 1: Audit"));
 
-  const auditPrompt = readFileSync(auditPromptPath, "utf-8");
   const result = await engine.run(auditPrompt);
   logToFile(logDir, iter, "audit", result.output);
 
@@ -108,7 +135,7 @@ async function runAuditStep(
   }
 
   if (!existsSync(REPORT_FILE)) {
-    logSuccess("No audit-report.md generated — codebase is clean!");
+    logSuccess("No audit/report.md generated — codebase is clean!");
     console.log(pc.green("  No findings — codebase is clean!"));
     return false; // signal to stop
   }
@@ -199,7 +226,7 @@ export async function auditLoop(
   options: AuditOptions
 ): Promise<void> {
   const projectName = basename(process.cwd());
-  const logDir = ".audit-logs";
+  const logDir = join(config.logDir, `willie-${projectName}`);
 
   if (!existsSync(logDir)) {
     mkdirSync(logDir, { recursive: true });
@@ -216,15 +243,12 @@ export async function auditLoop(
     return;
   }
 
-  // Verify audit prompt exists
-  if (!existsSync(options.auditPromptPath)) {
-    logError(`${options.auditPromptPath} not found. Create it first.`);
-    process.exitCode = 1;
-    return;
-  }
+  // Resolve audit prompt (CLI flag > project file > global file > built-in default)
+  const resolved = resolveAuditPrompt(options.auditPromptPath);
+  const auditPrompt = resolved.text;
 
-  // Ensure known-exceptions.md template exists
-  ensureKnownExceptions();
+  // Ensure audit/ directory and exceptions template exist
+  ensureAuditDir();
 
   const maxStr =
     options.maxIterations > 0
@@ -237,6 +261,7 @@ export async function auditLoop(
   console.log(`  Start step: ${options.startStep}`);
   console.log(`  Max iterations: ${maxStr}`);
   console.log(`  Model: ${model} (effort: ${effort})`);
+  console.log(`  Audit prompt: ${resolved.source}`);
   console.log("");
 
   let iter = 0;
@@ -270,7 +295,7 @@ export async function auditLoop(
         case "audit": {
           const shouldContinue = await runAuditStep(
             engine,
-            options.auditPromptPath,
+            auditPrompt,
             logDir,
             iter
           );
@@ -298,7 +323,7 @@ export async function auditLoop(
     } else {
       const shouldContinue = await runAuditStep(
         engine,
-        options.auditPromptPath,
+        auditPrompt,
         logDir,
         iter
       );

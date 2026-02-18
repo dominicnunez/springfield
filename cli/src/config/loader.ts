@@ -32,17 +32,13 @@ export interface Config {
 
   // Willie
   willieMaxIterations: number;
-  willieAuditPrompt: string;
+  willieAuditPrompt: string | undefined;
   willieModel: string | undefined;
   willieEffort: EffortLevel | undefined;
 
   // Logging
   logDir: string;
   progressDir: string;
-
-  // BTCA
-  btcaEnabled: boolean;
-  btcaResources: string[];
 
   // Chaining
   auditAfterComplete: boolean;
@@ -88,24 +84,20 @@ max-consecutive-failures = 3
 
 [willie]
 max-iterations = 0
-# audit-prompt = audit-prompt.md
+# audit-prompt = audit/prompt.md
 # model = opus
 # effort = high
 
 [logging]
 # log-dir = ~/.sfk/logs
 # progress-dir = ~/.sfk/progress
-
-[btca]
-enabled = false
-# resources =
 `;
 
 /**
  * Parse INI-style config file with [section] headers.
  * Returns flat map with keys like "section.key".
  */
-function parseConfigFile(content: string): Record<string, string> {
+export function parseConfigFile(content: string): Record<string, string> {
   const result: Record<string, string> = {};
   let currentSection = "";
 
@@ -185,7 +177,7 @@ function parseEffort(value: string): EffortLevel | undefined {
 /**
  * Apply parsed INI config values to Config object
  */
-function applyConfigToConfig(
+export function applyConfigToConfig(
   config: Config,
   parsed: Record<string, string>
 ): void {
@@ -269,19 +261,6 @@ function applyConfigToConfig(
     config.logDir = parsed["logging.log-dir"];
   if (parsed["logging.progress-dir"]?.trim())
     config.progressDir = parsed["logging.progress-dir"];
-
-  // [btca]
-  const btcaEnabled = parsed["btca.enabled"];
-  if (btcaEnabled !== undefined) {
-    const val = parseBool(btcaEnabled);
-    if (val !== undefined) config.btcaEnabled = val;
-  }
-  if (parsed["btca.resources"]?.trim()) {
-    config.btcaResources = parsed["btca.resources"]
-      .split(",")
-      .map((r) => r.trim())
-      .filter((r) => r);
-  }
 }
 
 /**
@@ -325,15 +304,6 @@ function applyEnvToConfig(
   if (env.RALPH_LOG_DIR?.trim()) config.logDir = env.RALPH_LOG_DIR;
   if (env.RALPH_PROGRESS_DIR?.trim())
     config.progressDir = env.RALPH_PROGRESS_DIR;
-  if (env.BTCA_ENABLED !== undefined) {
-    const val = parseBool(env.BTCA_ENABLED);
-    if (val !== undefined) config.btcaEnabled = val;
-  }
-  if (env.BTCA_RESOURCES?.trim()) {
-    config.btcaResources = env.BTCA_RESOURCES.split(",")
-      .map((r) => r.trim())
-      .filter((r) => r);
-  }
 }
 
 /**
@@ -390,13 +360,11 @@ function defaultConfig(): Config {
     ralphModel: undefined,
     ralphEffort: undefined,
     willieMaxIterations: 0,
-    willieAuditPrompt: "audit-prompt.md",
+    willieAuditPrompt: undefined,
     willieModel: undefined,
     willieEffort: undefined,
     logDir: join(homedir(), ".sfk", "logs"),
     progressDir: join(homedir(), ".sfk", "progress"),
-    btcaEnabled: false,
-    btcaResources: [],
     auditAfterComplete: false,
   };
 }
@@ -480,10 +448,6 @@ export function loadConfig(): Config {
     processEnv.RALPH_LOG_DIR = process.env.RALPH_LOG_DIR;
   if (process.env.RALPH_PROGRESS_DIR)
     processEnv.RALPH_PROGRESS_DIR = process.env.RALPH_PROGRESS_DIR;
-  if (process.env.BTCA_ENABLED)
-    processEnv.BTCA_ENABLED = process.env.BTCA_ENABLED;
-  if (process.env.BTCA_RESOURCES)
-    processEnv.BTCA_RESOURCES = process.env.BTCA_RESOURCES;
 
   applyEnvToConfig(config, processEnv);
 

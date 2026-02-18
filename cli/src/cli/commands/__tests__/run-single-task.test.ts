@@ -64,13 +64,11 @@ describe("single task mode", () => {
       ralphModel: undefined,
       ralphEffort: undefined,
       willieMaxIterations: 0,
-      willieAuditPrompt: "audit-prompt.md",
+      willieAuditPrompt: undefined,
       willieModel: undefined,
       willieEffort: undefined,
       logDir: join(tempRoot, "logs"),
       progressDir: join(tempRoot, "progress"),
-      btcaEnabled: false,
-      btcaResources: [],
       auditAfterComplete: false,
     };
 
