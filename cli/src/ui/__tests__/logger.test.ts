@@ -1,21 +1,20 @@
-import { describe, expect, test, beforeEach, afterEach, spyOn, mock } from "bun:test";
-import { 
-  initLogger, 
-  logInfo, 
-  logSuccess, 
-  logWarning, 
-  logError, 
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import {
+  initLogger,
+  logAiOutput,
   logDebug,
+  logError,
+  logInfo,
   logIteration,
   logSessionStart,
-  logAiOutput,
+  logSuccess,
+  logWarning,
+  printDivider,
   printHeader,
   printStep,
-  printDivider,
 } from "../logger.js";
-import * as fs from "node:fs";
-import { existsSync, readFileSync, rmSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
 
 const TEST_LOG_DIR = "/tmp/ralph-logger-test";
 const TEST_LOG_FILE = join(TEST_LOG_DIR, "test.log");
@@ -94,8 +93,8 @@ describe("logger", () => {
       const spy = spyOn(console, "log").mockImplementation(() => {});
       logDebug("debug message");
       // Should not have been called for debug message
-      const debugCalls = spy.mock.calls.filter(call => 
-        call[0]?.includes?.("[DEBUG]")
+      const debugCalls = spy.mock.calls.filter((call) =>
+        call[0]?.includes?.("[DEBUG]"),
       );
       expect(debugCalls.length).toBe(0);
       spy.mockRestore();
@@ -117,7 +116,7 @@ describe("logger", () => {
     test("writes to log file when configured", () => {
       initLogger({ logFile: TEST_LOG_FILE });
       logInfo("file test");
-      
+
       const content = readFileSync(TEST_LOG_FILE, "utf-8");
       expect(content).toContain("[INFO]");
       expect(content).toContain("file test");
@@ -126,7 +125,7 @@ describe("logger", () => {
     test("includes timestamp in log file", () => {
       initLogger({ logFile: TEST_LOG_FILE });
       logInfo("timestamp test");
-      
+
       const content = readFileSync(TEST_LOG_FILE, "utf-8");
       // Timestamp format: [YYYY-MM-DD HH:MM:SS]
       expect(content).toMatch(/\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]/);
@@ -134,29 +133,29 @@ describe("logger", () => {
 
     test("logs different levels correctly", () => {
       initLogger({ logFile: TEST_LOG_FILE });
-      
+
       // Suppress console output
       const logSpy = spyOn(console, "log").mockImplementation(() => {});
       const errorSpy = spyOn(console, "error").mockImplementation(() => {});
-      
+
       logInfo("info test");
       logWarning("warn test");
       logError("error test");
-      
+
       const content = readFileSync(TEST_LOG_FILE, "utf-8");
       expect(content).toContain("[INFO] info test");
       expect(content).toContain("[WARN] warn test");
       expect(content).toContain("[ERROR] error test");
-      
+
       logSpy.mockRestore();
       errorSpy.mockRestore();
     });
 
     test("logDebug always writes to file even when not verbose", () => {
       initLogger({ logFile: TEST_LOG_FILE, verbose: false });
-      
+
       logDebug("debug file test");
-      
+
       const content = readFileSync(TEST_LOG_FILE, "utf-8");
       expect(content).toContain("[DEBUG]");
       expect(content).toContain("debug file test");
@@ -166,25 +165,25 @@ describe("logger", () => {
   describe("logIteration", () => {
     test("formats iteration with max iterations", () => {
       const spy = spyOn(console, "log").mockImplementation(() => {});
-      
+
       logIteration(3, 10, "implement feature", "gpt-4");
-      
-      const calls = spy.mock.calls.map(c => c[0]).join("\n");
+
+      const calls = spy.mock.calls.map((c) => c[0]).join("\n");
       expect(calls).toContain("Iteration 3 of 10");
       expect(calls).toContain("gpt-4");
       expect(calls).toContain("implement feature");
-      
+
       spy.mockRestore();
     });
 
     test("formats iteration with infinite mode", () => {
       const spy = spyOn(console, "log").mockImplementation(() => {});
-      
+
       logIteration(5, -1, "continuous task", "claude");
-      
-      const calls = spy.mock.calls.map(c => c[0]).join("\n");
+
+      const calls = spy.mock.calls.map((c) => c[0]).join("\n");
       expect(calls).toContain("5 (infinite mode)");
-      
+
       spy.mockRestore();
     });
   });
@@ -192,9 +191,9 @@ describe("logger", () => {
   describe("logSessionStart", () => {
     test("writes session header to log file", () => {
       initLogger({ logFile: TEST_LOG_FILE });
-      
+
       logSessionStart("my-project", "opencode", "gpt-4");
-      
+
       const content = readFileSync(TEST_LOG_FILE, "utf-8");
       expect(content).toContain("Ralph Session Started");
       expect(content).toContain("my-project");
@@ -212,29 +211,29 @@ describe("logger", () => {
   describe("logAiOutput", () => {
     test("writes output to log file", () => {
       initLogger({ logFile: TEST_LOG_FILE });
-      
+
       logAiOutput("AI response text");
-      
+
       const content = readFileSync(TEST_LOG_FILE, "utf-8");
       expect(content).toContain("AI response text");
     });
 
     test("truncates long output", () => {
       initLogger({ logFile: TEST_LOG_FILE });
-      
+
       const longOutput = Array(100).fill("line").join("\n");
       logAiOutput(longOutput, 10);
-      
+
       const content = readFileSync(TEST_LOG_FILE, "utf-8");
       expect(content).toContain("[... truncated ...]");
     });
 
     test("does not truncate short output", () => {
       initLogger({ logFile: TEST_LOG_FILE });
-      
+
       const shortOutput = Array(5).fill("line").join("\n");
       logAiOutput(shortOutput, 10);
-      
+
       const content = readFileSync(TEST_LOG_FILE, "utf-8");
       expect(content).not.toContain("[... truncated ...]");
     });

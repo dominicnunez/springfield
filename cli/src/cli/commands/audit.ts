@@ -1,20 +1,25 @@
-import { join, basename } from "node:path";
-import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from "node:fs";
-import type { Config } from "../../config/loader.js";
-import { getWillieModel, getWillieEffort } from "../../config/loader.js";
-import { ClaudeEngine } from "../../engines/claude.js";
-import { DEFAULT_AUDIT_PROMPT, VALIDATE_PROMPT, FIX_PROMPT, type Engine } from "../../engines/base.js";
-import {
-  initLogger,
-  logInfo,
-  logSuccess,
-  logWarning,
-  logError,
-} from "../../ui/logger.js";
-import pc from "picocolors";
 import { spawnSync } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
+import { basename, join } from "node:path";
+import pc from "picocolors";
+import type { Config } from "../../config/loader.js";
+import { getWillieEffort, getWillieModel } from "../../config/loader.js";
+import {
+  DEFAULT_AUDIT_PROMPT,
+  type Engine,
+  FIX_PROMPT,
+  VALIDATE_PROMPT,
+} from "../../engines/base.js";
+import { ClaudeEngine } from "../../engines/claude.js";
+import { logError, logInfo, logSuccess, logWarning } from "../../ui/logger.js";
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -86,7 +91,12 @@ function ensureAuditDir(): void {
   }
 }
 
-function logToFile(logDir: string, iter: number, step: string, output: string): void {
+function logToFile(
+  logDir: string,
+  iter: number,
+  step: string,
+  output: string,
+): void {
   const logFile = join(logDir, `iter${iter}-${step}.log`);
   appendFileSync(logFile, output);
 }
@@ -96,14 +106,22 @@ interface ResolvedPrompt {
   source: string;
 }
 
-function resolveAuditPrompt(auditPromptPath: string | undefined): ResolvedPrompt {
+function resolveAuditPrompt(
+  auditPromptPath: string | undefined,
+): ResolvedPrompt {
   if (auditPromptPath && existsSync(auditPromptPath)) {
-    return { text: readFileSync(auditPromptPath, "utf-8"), source: auditPromptPath };
+    return {
+      text: readFileSync(auditPromptPath, "utf-8"),
+      source: auditPromptPath,
+    };
   }
 
   const projectPrompt = join(AUDIT_DIR, "prompt.md");
   if (existsSync(projectPrompt)) {
-    return { text: readFileSync(projectPrompt, "utf-8"), source: projectPrompt };
+    return {
+      text: readFileSync(projectPrompt, "utf-8"),
+      source: projectPrompt,
+    };
   }
 
   const globalPrompt = join(homedir(), ".config", "sfk", "audit-prompt.md");
@@ -122,7 +140,7 @@ async function runAuditStep(
   engine: Engine,
   auditPrompt: string,
   logDir: string,
-  iter: number
+  iter: number,
 ): Promise<boolean> {
   logInfo("STEP 1: Running audit...");
   console.log(pc.cyan("  Step 1: Audit"));
@@ -156,7 +174,7 @@ async function runAuditStep(
 async function runValidateStep(
   engine: Engine,
   logDir: string,
-  iter: number
+  iter: number,
 ): Promise<void> {
   logInfo("STEP 2: Validating findings...");
   console.log(pc.cyan("  Step 2: Validate"));
@@ -187,7 +205,7 @@ async function runValidateStep(
 async function runFixStep(
   engine: Engine,
   logDir: string,
-  iter: number
+  iter: number,
 ): Promise<void> {
   if (!existsSync(REPORT_FILE)) {
     logInfo("No audit report to fix. Skipping step 3.");
@@ -223,7 +241,7 @@ async function runFixStep(
 
 export async function auditLoop(
   config: Config,
-  options: AuditOptions
+  options: AuditOptions,
 ): Promise<void> {
   const projectName = basename(process.cwd());
   const logDir = join(config.logDir, `willie-${projectName}`);
@@ -251,9 +269,7 @@ export async function auditLoop(
   ensureAuditDir();
 
   const maxStr =
-    options.maxIterations > 0
-      ? String(options.maxIterations)
-      : "unlimited";
+    options.maxIterations > 0 ? String(options.maxIterations) : "unlimited";
 
   console.log("");
   console.log(pc.cyan("=== Willie Starting ==="));
@@ -274,19 +290,17 @@ export async function auditLoop(
       logInfo(`Reached max iterations (${options.maxIterations}). Stopping.`);
       console.log(
         pc.yellow(
-          `  Reached max iterations (${options.maxIterations}). Stopping.`
-        )
+          `  Reached max iterations (${options.maxIterations}). Stopping.`,
+        ),
       );
       notify(
-        `Willie completed ${options.maxIterations} iteration(s) on ${projectName}.`
+        `Willie completed ${options.maxIterations} iteration(s) on ${projectName}.`,
       );
       break;
     }
 
     console.log("");
-    console.log(
-      pc.cyan(`========== ITERATION ${iter} ==========`)
-    );
+    console.log(pc.cyan(`========== ITERATION ${iter} ==========`));
 
     if (firstIter) {
       firstIter = false;
@@ -297,11 +311,11 @@ export async function auditLoop(
             engine,
             auditPrompt,
             logDir,
-            iter
+            iter,
           );
           if (!shouldContinue) {
             notify(
-              `Willie: codebase clean after ${iter} iteration(s) on ${projectName}. No findings.`
+              `Willie: codebase clean after ${iter} iteration(s) on ${projectName}. No findings.`,
             );
             break;
           }
@@ -325,11 +339,11 @@ export async function auditLoop(
         engine,
         auditPrompt,
         logDir,
-        iter
+        iter,
       );
       if (!shouldContinue) {
         notify(
-          `Willie: codebase clean after ${iter} iteration(s) on ${projectName}. No findings.`
+          `Willie: codebase clean after ${iter} iteration(s) on ${projectName}. No findings.`,
         );
         break;
       }

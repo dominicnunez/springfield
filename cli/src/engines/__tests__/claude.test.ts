@@ -1,6 +1,6 @@
-import { describe, expect, test, spyOn } from "bun:test";
-import { ClaudeEngine } from "../claude.js";
+import { describe, expect, spyOn, test } from "bun:test";
 import * as childProcess from "node:child_process";
+import { ClaudeEngine } from "../claude.js";
 
 describe("ClaudeEngine", () => {
   describe("constructor", () => {
@@ -26,11 +26,13 @@ describe("ClaudeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new ClaudeEngine();
       expect(engine.isAvailable()).toBe(true);
-      expect(spy).toHaveBeenCalledWith("which", ["claude"], { encoding: "utf-8" });
-      
+      expect(spy).toHaveBeenCalledWith("which", ["claude"], {
+        encoding: "utf-8",
+      });
+
       spy.mockRestore();
     });
 
@@ -43,10 +45,10 @@ describe("ClaudeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new ClaudeEngine();
       expect(engine.isAvailable()).toBe(false);
-      
+
       spy.mockRestore();
     });
   });
@@ -69,19 +71,27 @@ describe("ClaudeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new ClaudeEngine("sonnet");
       await engine.run("test prompt");
-      
+
       expect(spy).toHaveBeenCalledWith(
         "claude",
-        ["--model", "sonnet", "--effort", "high", "--dangerously-skip-permissions", "-p", "test prompt"],
+        [
+          "--model",
+          "sonnet",
+          "--effort",
+          "high",
+          "--dangerously-skip-permissions",
+          "-p",
+          "test prompt",
+        ],
         expect.objectContaining({
           encoding: "utf-8",
           maxBuffer: 50 * 1024 * 1024,
-        })
+        }),
       );
-      
+
       spy.mockRestore();
     });
 
@@ -94,15 +104,15 @@ describe("ClaudeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new ClaudeEngine();
       const result = await engine.run("test");
-      
+
       expect(result.success).toBe(true);
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain("Task completed");
       expect(result.rateLimited).toBe(false);
-      
+
       spy.mockRestore();
     });
 
@@ -115,14 +125,14 @@ describe("ClaudeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new ClaudeEngine();
       const result = await engine.run("test");
-      
+
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
       expect(result.output).toContain("Error occurred");
-      
+
       spy.mockRestore();
     });
 
@@ -135,13 +145,13 @@ describe("ClaudeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new ClaudeEngine();
       const result = await engine.run("test");
-      
+
       expect(result.output).toContain("stdout content");
       expect(result.output).toContain("stderr content");
-      
+
       spy.mockRestore();
     });
 
@@ -154,13 +164,13 @@ describe("ClaudeEngine", () => {
         output: [],
         signal: "SIGTERM",
       });
-      
+
       const engine = new ClaudeEngine();
       const result = await engine.run("test");
-      
+
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
-      
+
       spy.mockRestore();
     });
 
@@ -173,13 +183,13 @@ describe("ClaudeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new ClaudeEngine();
       const result = await engine.run("test");
-      
+
       // ClaudeEngine doesn't support rate limit detection
       expect(result.rateLimited).toBe(false);
-      
+
       spy.mockRestore();
     });
   });

@@ -78,7 +78,7 @@ export function detectTestCommand(): string | undefined {
  * Check if a file is a test file
  */
 function isTestFile(filename: string): boolean {
-  return TEST_FILE_PATTERNS.some(pattern => pattern.test(filename));
+  return TEST_FILE_PATTERNS.some((pattern) => pattern.test(filename));
 }
 
 /**
@@ -92,7 +92,7 @@ export function getChangedTestFiles(): string[] {
     encoding: "utf-8",
     cwd: process.cwd(),
   });
-  
+
   if (unstaged.stdout) {
     for (const file of unstaged.stdout.split("\n")) {
       if (file && isTestFile(file)) {
@@ -106,7 +106,7 @@ export function getChangedTestFiles(): string[] {
     encoding: "utf-8",
     cwd: process.cwd(),
   });
-  
+
   if (staged.stdout) {
     for (const file of staged.stdout.split("\n")) {
       if (file && isTestFile(file)) {
@@ -116,11 +116,15 @@ export function getChangedTestFiles(): string[] {
   }
 
   // Check last commit (in case AI already committed)
-  const lastCommit = spawnSync("git", ["diff", "--name-only", "HEAD~1", "HEAD"], {
-    encoding: "utf-8",
-    cwd: process.cwd(),
-  });
-  
+  const lastCommit = spawnSync(
+    "git",
+    ["diff", "--name-only", "HEAD~1", "HEAD"],
+    {
+      encoding: "utf-8",
+      cwd: process.cwd(),
+    },
+  );
+
   if (lastCommit.stdout && lastCommit.status === 0) {
     for (const file of lastCommit.stdout.split("\n")) {
       if (file && isTestFile(file)) {
@@ -137,7 +141,7 @@ export function getChangedTestFiles(): string[] {
  */
 export function verifyTestsWritten(): { success: boolean; files: string[] } {
   const testFiles = getChangedTestFiles();
-  
+
   if (testFiles.length === 0) {
     logWarning("No test files were created or modified");
     console.log("  No test files were created or modified this iteration");
@@ -148,7 +152,7 @@ export function verifyTestsWritten(): { success: boolean; files: string[] } {
   for (const file of testFiles) {
     console.log(`    ${file}`);
   }
-  
+
   return { success: true, files: testFiles };
 }
 
@@ -172,7 +176,7 @@ export function runTests(testCmd: string): TestResult {
   printDivider();
 
   const passed = result.status === 0;
-  
+
   if (passed) {
     console.log("  Tests passed!");
   } else {

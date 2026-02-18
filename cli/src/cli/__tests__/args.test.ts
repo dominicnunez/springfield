@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { tmpdir, homedir } from "node:os";
-import { parseArgs, mergeOptions } from "../args.js";
 import type { Config } from "../../config/loader.js";
+import { mergeOptions, parseArgs } from "../args.js";
 
 function baseConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -46,7 +46,11 @@ describe("parseArgs", () => {
   });
 
   it("treats non-directory positional arg as single task", () => {
-    const { command, options } = parseArgs(["node", "sfk", "add dark mode toggle"]);
+    const { command, options } = parseArgs([
+      "node",
+      "sfk",
+      "add dark mode toggle",
+    ]);
     expect(command).toBe("run");
     expect(options.singleTask).toBe("add dark mode toggle");
   });
@@ -70,7 +74,13 @@ describe("parseArgs", () => {
   });
 
   it("parses audit command with step option", () => {
-    const { command, auditOptions } = parseArgs(["node", "sfk", "audit", "--step", "fix"]);
+    const { command, auditOptions } = parseArgs([
+      "node",
+      "sfk",
+      "audit",
+      "--step",
+      "fix",
+    ]);
     expect(command).toBe("audit");
     expect(auditOptions.startStep).toBe("fix");
   });
@@ -101,12 +111,24 @@ describe("parseArgs", () => {
   });
 
   it("parses audit --audit-prompt with path", () => {
-    const { auditOptions } = parseArgs(["node", "sfk", "audit", "--audit-prompt", "custom.md"]);
+    const { auditOptions } = parseArgs([
+      "node",
+      "sfk",
+      "audit",
+      "--audit-prompt",
+      "custom.md",
+    ]);
     expect(auditOptions.auditPrompt).toBe("custom.md");
   });
 
   it("parses audit --max-iterations", () => {
-    const { auditOptions } = parseArgs(["node", "sfk", "audit", "--max-iterations", "5"]);
+    const { auditOptions } = parseArgs([
+      "node",
+      "sfk",
+      "audit",
+      "--max-iterations",
+      "5",
+    ]);
     expect(auditOptions.maxIterations).toBe(5);
   });
 });
@@ -145,7 +167,10 @@ describe("mergeOptions", () => {
   });
 
   it("sets opencode model when engine is opencode", () => {
-    const config = baseConfig({ engine: "opencode", ocPrimeModel: "big-pickle" });
+    const config = baseConfig({
+      engine: "opencode",
+      ocPrimeModel: "big-pickle",
+    });
     const merged = mergeOptions(config, { model: "gpt-5" });
 
     expect(merged.ocPrimeModel).toBe("gpt-5");

@@ -1,5 +1,5 @@
-import { Command } from "commander";
 import { statSync } from "node:fs";
+import { Command } from "commander";
 import type { Config, EngineType } from "../config/loader.js";
 import type { AuditStep } from "./commands/audit.js";
 
@@ -51,7 +51,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
   program
     .name("sfk")
-    .description("Springfield Kit — Autonomous AI coding agent with enforced test verification")
+    .description(
+      "Springfield Kit — Autonomous AI coding agent with enforced test verification",
+    )
     .version(VERSION);
 
   // Default "run" command (also handles bare `sfk "task"` and `sfk`)
@@ -60,11 +62,22 @@ export function parseArgs(argv: string[]): ParsedArgs {
     .description("Run the ralph coding loop (default)")
     .argument("[task]", "Single task to run (non-directory positional)")
     .option("--engine <type>", "AI engine to use: opencode or claude")
-    .option("--opencode", "Use OpenCode engine (shortcut for --engine opencode)")
+    .option(
+      "--opencode",
+      "Use OpenCode engine (shortcut for --engine opencode)",
+    )
     .option("--claude", "Use Claude Code engine (shortcut for --engine claude)")
     .option("--model <name>", "Override the model for the selected engine")
-    .option("--max-iterations <n>", "Maximum iterations (-1 for infinite)", parseInt)
-    .option("--sleep <seconds>", "Seconds to sleep between iterations", parseInt)
+    .option(
+      "--max-iterations <n>",
+      "Maximum iterations (-1 for infinite)",
+      parseInt,
+    )
+    .option(
+      "--sleep <seconds>",
+      "Seconds to sleep between iterations",
+      parseInt,
+    )
     .option("--skip-commit", "Do not auto-commit changes")
     .option("--no-tests", "Skip test verification (not recommended)")
     .option("--test-cmd <cmd>", "Custom test command")
@@ -102,8 +115,16 @@ export function parseArgs(argv: string[]): ParsedArgs {
   program
     .command("audit")
     .description("Run the willie audit loop")
-    .option("--step <step>", "Start from step: audit, validate, or fix", "audit")
-    .option("--max-iterations <n>", "Maximum audit iterations (0 = unlimited)", parseInt)
+    .option(
+      "--step <step>",
+      "Start from step: audit, validate, or fix",
+      "audit",
+    )
+    .option(
+      "--max-iterations <n>",
+      "Maximum audit iterations (0 = unlimited)",
+      parseInt,
+    )
     .option("--audit-prompt <path>", "Path to custom audit prompt file")
     .option("-v, --verbose", "Enable verbose output")
     .action((opts) => {
@@ -111,7 +132,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
       const step = opts.step as AuditStep;
       if (step && !["audit", "validate", "fix"].includes(step)) {
-        console.error(`Invalid step: ${step}. Must be audit, validate, or fix.`);
+        console.error(
+          `Invalid step: ${step}. Must be audit, validate, or fix.`,
+        );
         process.exit(1);
       }
 

@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
-  parsePrd,
-  getFirstIncompleteTask,
-  countIncompleteTasks,
   allTasksComplete,
-  markTaskComplete,
+  countIncompleteTasks,
+  getFirstIncompleteTask,
   getTaskSummary,
+  markTaskComplete,
+  parsePrd,
   type Task,
 } from "../parser.js";
 
@@ -35,8 +35,16 @@ describe("tasks/parser", () => {
 
       const tasks = parsePrd(prdPath);
       expect(tasks).toHaveLength(2);
-      expect(tasks[0]).toEqual({ text: "First task", completed: false, lineNumber: 0 });
-      expect(tasks[1]).toEqual({ text: "Second task", completed: false, lineNumber: 1 });
+      expect(tasks[0]).toEqual({
+        text: "First task",
+        completed: false,
+        lineNumber: 0,
+      });
+      expect(tasks[1]).toEqual({
+        text: "Second task",
+        completed: false,
+        lineNumber: 1,
+      });
     });
 
     test("parses completed tasks with [x]", () => {
@@ -72,7 +80,10 @@ describe("tasks/parser", () => {
 
     test("ignores non-task lines", () => {
       const prdPath = join(tempDir, "PRD.md");
-      writeFileSync(prdPath, "# Header\n\nSome text\n\n- [ ] Actual task\n\n- Regular bullet");
+      writeFileSync(
+        prdPath,
+        "# Header\n\nSome text\n\n- [ ] Actual task\n\n- Regular bullet",
+      );
 
       const tasks = parsePrd(prdPath);
       expect(tasks).toHaveLength(1);
@@ -81,7 +92,10 @@ describe("tasks/parser", () => {
 
     test("preserves correct line numbers", () => {
       const prdPath = join(tempDir, "PRD.md");
-      writeFileSync(prdPath, "# Header\n\n- [ ] Task on line 2\n\n- [ ] Task on line 4");
+      writeFileSync(
+        prdPath,
+        "# Header\n\n- [ ] Task on line 2\n\n- [ ] Task on line 4",
+      );
 
       const tasks = parsePrd(prdPath);
       expect(tasks[0].lineNumber).toBe(2);
@@ -170,7 +184,11 @@ describe("tasks/parser", () => {
       const prdPath = join(tempDir, "PRD.md");
       writeFileSync(prdPath, "- [ ] First task\n- [ ] Second task");
 
-      const task: Task = { text: "First task", completed: false, lineNumber: 0 };
+      const task: Task = {
+        text: "First task",
+        completed: false,
+        lineNumber: 0,
+      };
       markTaskComplete(prdPath, task);
 
       const content = readFileSync(prdPath, "utf-8");

@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import type { Engine, EngineResult } from "./base.js";
 import type { EffortLevel } from "../config/loader.js";
+import type { Engine, EngineResult } from "./base.js";
 
 export class ClaudeEngine implements Engine {
   name = "claude";
@@ -19,10 +19,13 @@ export class ClaudeEngine implements Engine {
 
   async run(prompt: string): Promise<EngineResult> {
     const args = [
-      "--model", this.model,
-      "--effort", this.effort,
+      "--model",
+      this.model,
+      "--effort",
+      this.effort,
       "--dangerously-skip-permissions",
-      "-p", prompt,
+      "-p",
+      prompt,
     ];
 
     const result = spawnSync("claude", args, {

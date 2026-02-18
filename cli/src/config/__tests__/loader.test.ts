@@ -3,13 +3,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Config } from "../loader.js";
 import {
-  parseConfigFile,
   applyConfigToConfig,
   getCurrentModel,
-  getRalphModel,
   getRalphEffort,
-  getWillieModel,
+  getRalphModel,
   getWillieEffort,
+  getWillieModel,
+  parseConfigFile,
 } from "../loader.js";
 
 function baseConfig(overrides: Partial<Config> = {}): Config {
@@ -95,7 +95,7 @@ test-cmd = KEY=VAL bun test
       const result = parseConfigFile(`
 standalone = value
 `);
-      expect(result["standalone"]).toBe("value");
+      expect(result.standalone).toBe("value");
     });
 
     test("trims whitespace around keys and values", () => {
@@ -297,35 +297,67 @@ progress-dir = /tmp/progress
 
   describe("model helpers", () => {
     test("getCurrentModel returns claude model when engine is claude", () => {
-      expect(getCurrentModel(baseConfig({ engine: "claude", claudeModel: "opus" }))).toBe("opus");
+      expect(
+        getCurrentModel(baseConfig({ engine: "claude", claudeModel: "opus" })),
+      ).toBe("opus");
     });
 
     test("getCurrentModel returns opencode model when engine is opencode", () => {
-      expect(getCurrentModel(baseConfig({ engine: "opencode", ocPrimeModel: "gpt-5" }))).toBe("gpt-5");
+      expect(
+        getCurrentModel(
+          baseConfig({ engine: "opencode", ocPrimeModel: "gpt-5" }),
+        ),
+      ).toBe("gpt-5");
     });
 
     test("getRalphModel uses per-agent override for claude", () => {
-      expect(getRalphModel(baseConfig({ engine: "claude", claudeModel: "sonnet", ralphModel: "opus" }))).toBe("opus");
+      expect(
+        getRalphModel(
+          baseConfig({
+            engine: "claude",
+            claudeModel: "sonnet",
+            ralphModel: "opus",
+          }),
+        ),
+      ).toBe("opus");
     });
 
     test("getRalphModel falls back to global claude model", () => {
-      expect(getRalphModel(baseConfig({ engine: "claude", claudeModel: "sonnet" }))).toBe("sonnet");
+      expect(
+        getRalphModel(baseConfig({ engine: "claude", claudeModel: "sonnet" })),
+      ).toBe("sonnet");
     });
 
     test("getRalphModel returns opencode model regardless of ralphModel", () => {
-      expect(getRalphModel(baseConfig({ engine: "opencode", ocPrimeModel: "gpt-5", ralphModel: "opus" }))).toBe("gpt-5");
+      expect(
+        getRalphModel(
+          baseConfig({
+            engine: "opencode",
+            ocPrimeModel: "gpt-5",
+            ralphModel: "opus",
+          }),
+        ),
+      ).toBe("gpt-5");
     });
 
     test("getRalphEffort uses per-agent override", () => {
-      expect(getRalphEffort(baseConfig({ claudeEffort: "high", ralphEffort: "low" }))).toBe("low");
+      expect(
+        getRalphEffort(
+          baseConfig({ claudeEffort: "high", ralphEffort: "low" }),
+        ),
+      ).toBe("low");
     });
 
     test("getRalphEffort falls back to global effort", () => {
-      expect(getRalphEffort(baseConfig({ claudeEffort: "medium" }))).toBe("medium");
+      expect(getRalphEffort(baseConfig({ claudeEffort: "medium" }))).toBe(
+        "medium",
+      );
     });
 
     test("getWillieModel uses per-agent override", () => {
-      expect(getWillieModel(baseConfig({ willieModel: "sonnet" }))).toBe("sonnet");
+      expect(getWillieModel(baseConfig({ willieModel: "sonnet" }))).toBe(
+        "sonnet",
+      );
     });
 
     test("getWillieModel defaults to opus", () => {
@@ -337,7 +369,9 @@ progress-dir = /tmp/progress
     });
 
     test("getWillieEffort falls back to global effort", () => {
-      expect(getWillieEffort(baseConfig({ claudeEffort: "medium" }))).toBe("medium");
+      expect(getWillieEffort(baseConfig({ claudeEffort: "medium" }))).toBe(
+        "medium",
+      );
     });
   });
 });

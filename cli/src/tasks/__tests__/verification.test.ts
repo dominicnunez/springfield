@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { detectTestCommand, getChangedTestFiles, verify } from "../verification.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  detectTestCommand,
+  getChangedTestFiles,
+  verify,
+} from "../verification.js";
 
 describe("tasks/verification", () => {
   let tempDir: string;
@@ -28,7 +32,7 @@ describe("tasks/verification", () => {
     test("detects npm test from package.json", () => {
       writeFileSync(
         join(tempDir, "package.json"),
-        JSON.stringify({ scripts: { test: "jest" } })
+        JSON.stringify({ scripts: { test: "jest" } }),
       );
       expect(detectTestCommand()).toBe("npm test");
     });
@@ -36,7 +40,7 @@ describe("tasks/verification", () => {
     test("detects bun test when bun.lockb exists", () => {
       writeFileSync(
         join(tempDir, "package.json"),
-        JSON.stringify({ scripts: { test: "bun test" } })
+        JSON.stringify({ scripts: { test: "bun test" } }),
       );
       writeFileSync(join(tempDir, "bun.lockb"), "");
       expect(detectTestCommand()).toBe("bun test");
@@ -45,7 +49,7 @@ describe("tasks/verification", () => {
     test("detects pnpm test when pnpm-lock.yaml exists", () => {
       writeFileSync(
         join(tempDir, "package.json"),
-        JSON.stringify({ scripts: { test: "vitest" } })
+        JSON.stringify({ scripts: { test: "vitest" } }),
       );
       writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
       expect(detectTestCommand()).toBe("pnpm test");
@@ -54,7 +58,7 @@ describe("tasks/verification", () => {
     test("detects yarn test when yarn.lock exists", () => {
       writeFileSync(
         join(tempDir, "package.json"),
-        JSON.stringify({ scripts: { test: "jest" } })
+        JSON.stringify({ scripts: { test: "jest" } }),
       );
       writeFileSync(join(tempDir, "yarn.lock"), "");
       expect(detectTestCommand()).toBe("yarn test");
@@ -103,7 +107,7 @@ describe("tasks/verification", () => {
     test("package.json takes precedence over config files", () => {
       writeFileSync(
         join(tempDir, "package.json"),
-        JSON.stringify({ scripts: { test: "custom test" } })
+        JSON.stringify({ scripts: { test: "custom test" } }),
       );
       writeFileSync(join(tempDir, "vitest.config.ts"), "export default {}");
       expect(detectTestCommand()).toBe("npm test");
@@ -112,7 +116,7 @@ describe("tasks/verification", () => {
     test("returns undefined for package.json without test script", () => {
       writeFileSync(
         join(tempDir, "package.json"),
-        JSON.stringify({ scripts: { build: "tsc" } })
+        JSON.stringify({ scripts: { build: "tsc" } }),
       );
       expect(detectTestCommand()).toBeUndefined();
     });
@@ -127,19 +131,31 @@ describe("tasks/verification", () => {
     beforeEach(() => {
       // Initialize a git repo in the temp dir
       spawnSync("git", ["init"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["config", "user.name", "Test"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["config", "user.email", "test@test.com"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
+      spawnSync("git", ["config", "user.name", "Test"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
 
       // Create initial commit so HEAD exists
       writeFileSync(join(tempDir, "README.md"), "init");
       spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "init"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["commit", "-m", "init"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
     });
 
     test("detects unstaged test file changes", () => {
       writeFileSync(join(tempDir, "app.test.ts"), "test('a', () => {})");
       spawnSync("git", ["add", "app.test.ts"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "add test"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["commit", "-m", "add test"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
 
       // Modify the test file (unstaged change vs HEAD)
       writeFileSync(join(tempDir, "app.test.ts"), "test('b', () => {})");
@@ -150,7 +166,10 @@ describe("tasks/verification", () => {
 
     test("detects staged test file changes", () => {
       writeFileSync(join(tempDir, "widget.spec.js"), "describe('x', () => {})");
-      spawnSync("git", ["add", "widget.spec.js"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["add", "widget.spec.js"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
 
       const files = getChangedTestFiles();
       expect(files).toContain("widget.spec.js");
@@ -158,8 +177,14 @@ describe("tasks/verification", () => {
 
     test("detects test files in last commit", () => {
       writeFileSync(join(tempDir, "handler_test.go"), "package main");
-      spawnSync("git", ["add", "handler_test.go"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "add go test"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["add", "handler_test.go"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
+      spawnSync("git", ["commit", "-m", "add go test"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
 
       const files = getChangedTestFiles();
       expect(files).toContain("handler_test.go");
@@ -177,19 +202,25 @@ describe("tasks/verification", () => {
       // Create, stage, AND commit the same test file
       writeFileSync(join(tempDir, "dup.test.ts"), "v1");
       spawnSync("git", ["add", "dup.test.ts"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "add dup"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["commit", "-m", "add dup"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
 
       // Now modify it (shows in both HEAD diff and unstaged)
       writeFileSync(join(tempDir, "dup.test.ts"), "v2");
 
       const files = getChangedTestFiles();
-      const count = files.filter(f => f === "dup.test.ts").length;
+      const count = files.filter((f) => f === "dup.test.ts").length;
       expect(count).toBe(1);
     });
 
     test("matches python test patterns", () => {
       writeFileSync(join(tempDir, "test_utils.py"), "def test_foo(): pass");
-      spawnSync("git", ["add", "test_utils.py"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["add", "test_utils.py"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
 
       const files = getChangedTestFiles();
       expect(files).toContain("test_utils.py");
@@ -215,11 +246,20 @@ describe("tasks/verification", () => {
     test("reports testsWritten=false when no test files changed", () => {
       // Initialize git repo
       spawnSync("git", ["init"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["config", "user.name", "Test"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["config", "user.email", "test@test.com"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
+      spawnSync("git", ["config", "user.name", "Test"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
       writeFileSync(join(tempDir, "README.md"), "init");
       spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "init"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["commit", "-m", "init"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
 
       const result = verify("echo 'tests pass'");
 
@@ -231,11 +271,20 @@ describe("tasks/verification", () => {
     test("runs test command and reports pass", () => {
       // Initialize git repo with a test file change
       spawnSync("git", ["init"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["config", "user.name", "Test"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["config", "user.email", "test@test.com"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
+      spawnSync("git", ["config", "user.name", "Test"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
       writeFileSync(join(tempDir, "README.md"), "init");
       spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "init"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["commit", "-m", "init"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
 
       writeFileSync(join(tempDir, "app.test.ts"), "test('a', () => {})");
       spawnSync("git", ["add", "app.test.ts"], { cwd: tempDir, stdio: "pipe" });
@@ -249,11 +298,20 @@ describe("tasks/verification", () => {
 
     test("runs test command and reports failure", () => {
       spawnSync("git", ["init"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["config", "user.name", "Test"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["config", "user.email", "test@test.com"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
+      spawnSync("git", ["config", "user.name", "Test"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
       writeFileSync(join(tempDir, "README.md"), "init");
       spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "init"], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["commit", "-m", "init"], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
 
       writeFileSync(join(tempDir, "app.test.ts"), "test('a', () => {})");
       spawnSync("git", ["add", "app.test.ts"], { cwd: tempDir, stdio: "pipe" });

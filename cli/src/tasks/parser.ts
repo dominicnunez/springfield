@@ -21,13 +21,13 @@ export function parsePrd(prdPath: string): Task[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    
+
     // Match task format: - [ ] text or - [x] text (with optional leading whitespace)
     const match = line.match(/^\s*-\s*\[([ xX])\]\s*(.+)$/);
     if (match) {
       const completed = match[1].toLowerCase() === "x";
       const text = match[2].trim();
-      
+
       tasks.push({
         text,
         completed,
@@ -43,21 +43,21 @@ export function parsePrd(prdPath: string): Task[] {
  * Get the first incomplete task
  */
 export function getFirstIncompleteTask(tasks: Task[]): Task | undefined {
-  return tasks.find(task => !task.completed);
+  return tasks.find((task) => !task.completed);
 }
 
 /**
  * Count incomplete tasks
  */
 export function countIncompleteTasks(tasks: Task[]): number {
-  return tasks.filter(task => !task.completed).length;
+  return tasks.filter((task) => !task.completed).length;
 }
 
 /**
  * Check if all tasks are complete
  */
 export function allTasksComplete(tasks: Task[]): boolean {
-  return tasks.length > 0 && tasks.every(task => task.completed);
+  return tasks.length > 0 && tasks.every((task) => task.completed);
 }
 
 /**
@@ -73,10 +73,7 @@ export function markTaskComplete(prdPath: string, task: Task): void {
 
   // Replace [ ] with [x] on the task's line
   if (task.lineNumber < lines.length) {
-    lines[task.lineNumber] = lines[task.lineNumber].replace(
-      /\[\s\]/,
-      "[x]"
-    );
+    lines[task.lineNumber] = lines[task.lineNumber].replace(/\[\s\]/, "[x]");
     writeFileSync(prdPath, lines.join("\n"));
   }
 }
@@ -86,8 +83,8 @@ export function markTaskComplete(prdPath: string, task: Task): void {
  */
 export function getTaskSummary(tasks: Task[]): string {
   const total = tasks.length;
-  const completed = tasks.filter(t => t.completed).length;
+  const completed = tasks.filter((t) => t.completed).length;
   const remaining = total - completed;
-  
+
   return `${completed}/${total} tasks complete (${remaining} remaining)`;
 }

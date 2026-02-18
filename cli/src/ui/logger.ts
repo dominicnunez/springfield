@@ -1,6 +1,6 @@
-import pc from "picocolors";
-import { appendFileSync, mkdirSync, existsSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import pc from "picocolors";
 
 export interface LoggerOptions {
   logFile?: string;
@@ -59,11 +59,17 @@ export function logDebug(message: string): void {
   writeToLogFile("DEBUG", message);
 }
 
-export function logIteration(iteration: number, maxIterations: number, task: string, model: string): void {
-  const iterStr = maxIterations === -1 
-    ? `${iteration} (infinite mode)` 
-    : `${iteration} of ${maxIterations}`;
-  
+export function logIteration(
+  iteration: number,
+  maxIterations: number,
+  task: string,
+  model: string,
+): void {
+  const iterStr =
+    maxIterations === -1
+      ? `${iteration} (infinite mode)`
+      : `${iteration} of ${maxIterations}`;
+
   console.log("");
   console.log(pc.cyan("==========================================="));
   console.log(pc.cyan(`  Iteration ${iterStr} - ${model}`));
@@ -74,9 +80,13 @@ export function logIteration(iteration: number, maxIterations: number, task: str
   writeToLogFile("INFO", `Task: ${task}`);
 }
 
-export function logSessionStart(projectName: string, engine: string, model: string): void {
+export function logSessionStart(
+  projectName: string,
+  engine: string,
+  model: string,
+): void {
   if (!logFilePath) return;
-  
+
   const header = [
     "",
     "═══════════════════════════════════════════════════════════════",
@@ -87,17 +97,17 @@ export function logSessionStart(projectName: string, engine: string, model: stri
     "═══════════════════════════════════════════════════════════════",
     "",
   ].join("\n");
-  
+
   appendFileSync(logFilePath, header);
 }
 
 export function logAiOutput(output: string, truncateLines = 50): void {
   if (!logFilePath) return;
-  
+
   const lines = output.split("\n");
   const truncated = lines.slice(0, truncateLines).join("\n");
-  appendFileSync(logFilePath, truncated + "\n");
-  
+  appendFileSync(logFilePath, `${truncated}\n`);
+
   if (lines.length > truncateLines) {
     appendFileSync(logFilePath, "[... truncated ...]\n");
   }

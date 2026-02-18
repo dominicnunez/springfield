@@ -23,6 +23,8 @@
     "build:linux-arm64": "bun build src/index.ts --compile --minify --target=bun-linux-arm64 --outfile dist/sfk-linux-arm64",
     "build:windows-x64": "bun build src/index.ts --compile --minify --target=bun-windows-x64 --outfile dist/sfk-windows-x64.exe",
     "build:all": "bun run build:darwin-arm64 && bun run build:darwin-x64 && bun run build:linux-x64 && bun run build:linux-arm64 && bun run build:windows-x64",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write --unsafe src/",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "bun run build:all"
   },
@@ -53,6 +55,7 @@
     "picocolors": "^1.1.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.2",
     "@types/bun": "^1.1.0",
     "typescript": "^5.0.0"
   },

@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 
 export type EngineType = "opencode" | "claude";
 export type EffortLevel = "high" | "medium" | "low";
@@ -179,7 +179,7 @@ function parseEffort(value: string): EffortLevel | undefined {
  */
 export function applyConfigToConfig(
   config: Config,
-  parsed: Record<string, string>
+  parsed: Record<string, string>,
 ): void {
   // [engine]
   const engineType = parsed["engine.type"];
@@ -227,7 +227,7 @@ export function applyConfigToConfig(
   if (parsed["ralph.max-consecutive-failures"])
     config.maxConsecutiveFailures = parseInt(
       parsed["ralph.max-consecutive-failures"],
-      10
+      10,
     );
   if (parsed["ralph.test-cmd"]?.trim())
     config.testCmd = parsed["ralph.test-cmd"];
@@ -244,10 +244,7 @@ export function applyConfigToConfig(
 
   // [willie]
   if (parsed["willie.max-iterations"])
-    config.willieMaxIterations = parseInt(
-      parsed["willie.max-iterations"],
-      10
-    );
+    config.willieMaxIterations = parseInt(parsed["willie.max-iterations"], 10);
   if (parsed["willie.audit-prompt"]?.trim())
     config.willieAuditPrompt = parsed["willie.audit-prompt"];
   if (parsed["willie.model"]) config.willieModel = parsed["willie.model"];
@@ -266,16 +263,12 @@ export function applyConfigToConfig(
 /**
  * Apply legacy .env values to config object
  */
-function applyEnvToConfig(
-  config: Config,
-  env: Record<string, string>
-): void {
+function applyEnvToConfig(config: Config, env: Record<string, string>): void {
   if (env.ENGINE === "claude" || env.ENGINE === "opencode")
     config.engine = env.ENGINE;
   if (env.MAX_ITERATIONS)
     config.maxIterations = parseInt(env.MAX_ITERATIONS, 10);
-  if (env.SLEEP_SECONDS)
-    config.sleepSeconds = parseInt(env.SLEEP_SECONDS, 10);
+  if (env.SLEEP_SECONDS) config.sleepSeconds = parseInt(env.SLEEP_SECONDS, 10);
   if (env.SKIP_COMMIT !== undefined) {
     const val = parseBool(env.SKIP_COMMIT);
     if (val !== undefined) config.skipCommit = val;
@@ -297,10 +290,7 @@ function applyEnvToConfig(
     if (val !== undefined) config.skipTestVerify = val;
   }
   if (env.MAX_CONSECUTIVE_FAILURES)
-    config.maxConsecutiveFailures = parseInt(
-      env.MAX_CONSECUTIVE_FAILURES,
-      10
-    );
+    config.maxConsecutiveFailures = parseInt(env.MAX_CONSECUTIVE_FAILURES, 10);
   if (env.RALPH_LOG_DIR?.trim()) config.logDir = env.RALPH_LOG_DIR;
   if (env.RALPH_PROGRESS_DIR?.trim())
     config.progressDir = env.RALPH_PROGRESS_DIR;
@@ -323,9 +313,7 @@ function ensureGlobalConfig(): void {
  */
 function checkLegacyConfig(): boolean {
   const legacyGlobal = existsSync(LEGACY_GLOBAL_FILE);
-  const legacyProject = existsSync(
-    join(process.cwd(), LEGACY_PROJECT_FILE)
-  );
+  const legacyProject = existsSync(join(process.cwd(), LEGACY_PROJECT_FILE));
 
   if (legacyGlobal || legacyProject) {
     const locations: string[] = [];
@@ -334,7 +322,7 @@ function checkLegacyConfig(): boolean {
     console.warn(
       `[WARN] Found legacy config: ${locations.join(", ")}\n` +
         `       Migrate to new format at ${GLOBAL_CONFIG_FILE}\n` +
-        `       See config.example for the new INI format.`
+        `       See config.example for the new INI format.`,
     );
     return true;
   }
@@ -382,9 +370,7 @@ export function loadConfig(): Config {
   const config = defaultConfig();
 
   const hasNewGlobal = existsSync(GLOBAL_CONFIG_FILE);
-  const hasNewProject = existsSync(
-    join(process.cwd(), PROJECT_CONFIG_FILE)
-  );
+  const hasNewProject = existsSync(join(process.cwd(), PROJECT_CONFIG_FILE));
   const hasLegacy = checkLegacyConfig();
 
   if (hasNewGlobal || hasNewProject) {
@@ -424,8 +410,7 @@ export function loadConfig(): Config {
     processEnv.MAX_ITERATIONS = process.env.MAX_ITERATIONS;
   if (process.env.SLEEP_SECONDS)
     processEnv.SLEEP_SECONDS = process.env.SLEEP_SECONDS;
-  if (process.env.SKIP_COMMIT)
-    processEnv.SKIP_COMMIT = process.env.SKIP_COMMIT;
+  if (process.env.SKIP_COMMIT) processEnv.SKIP_COMMIT = process.env.SKIP_COMMIT;
   if (process.env.PUSH_AFTER_COMMIT)
     processEnv.PUSH_AFTER_COMMIT = process.env.PUSH_AFTER_COMMIT;
   if (process.env.CLAUDE_MODEL)
@@ -442,8 +427,7 @@ export function loadConfig(): Config {
   if (process.env.SKIP_TEST_VERIFY)
     processEnv.SKIP_TEST_VERIFY = process.env.SKIP_TEST_VERIFY;
   if (process.env.MAX_CONSECUTIVE_FAILURES)
-    processEnv.MAX_CONSECUTIVE_FAILURES =
-      process.env.MAX_CONSECUTIVE_FAILURES;
+    processEnv.MAX_CONSECUTIVE_FAILURES = process.env.MAX_CONSECUTIVE_FAILURES;
   if (process.env.RALPH_LOG_DIR)
     processEnv.RALPH_LOG_DIR = process.env.RALPH_LOG_DIR;
   if (process.env.RALPH_PROGRESS_DIR)

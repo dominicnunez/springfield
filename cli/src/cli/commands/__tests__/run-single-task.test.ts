@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Config } from "../../../config/loader.js";
-import { generateSingleTaskPrompt, type Engine } from "../../../engines/base.js";
-import { runSingleTask } from "../run.js";
+import {
+  type Engine,
+  generateSingleTaskPrompt,
+} from "../../../engines/base.js";
 import { initLogger } from "../../../ui/logger.js";
+import { runSingleTask } from "../run.js";
 
 describe("single task mode", () => {
   let originalCwd: string;
@@ -35,9 +38,9 @@ describe("single task mode", () => {
   });
 
   test("generateSingleTaskPrompt includes in-memory PRD instructions", () => {
-    const prompt = generateSingleTaskPrompt("ship a toaster", { 
+    const prompt = generateSingleTaskPrompt("ship a toaster", {
       skipCommit: true,
-      progressFile: "/tmp/progress.log"
+      progressFile: "/tmp/progress.log",
     });
     expect(prompt).toContain("In-Memory PRD");
     expect(prompt).toContain("Do NOT create or modify PRD.md on disk.");

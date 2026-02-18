@@ -1,6 +1,6 @@
-import { describe, expect, test, beforeEach, afterEach, mock, spyOn } from "bun:test";
-import { OpenCodeEngine } from "../opencode.js";
+import { describe, expect, spyOn, test } from "bun:test";
 import * as childProcess from "node:child_process";
+import { OpenCodeEngine } from "../opencode.js";
 
 describe("OpenCodeEngine", () => {
   describe("constructor", () => {
@@ -32,11 +32,13 @@ describe("OpenCodeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new OpenCodeEngine();
       expect(engine.isAvailable()).toBe(true);
-      expect(spy).toHaveBeenCalledWith("which", ["opencode"], { encoding: "utf-8" });
-      
+      expect(spy).toHaveBeenCalledWith("which", ["opencode"], {
+        encoding: "utf-8",
+      });
+
       spy.mockRestore();
     });
 
@@ -49,10 +51,10 @@ describe("OpenCodeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new OpenCodeEngine();
       expect(engine.isAvailable()).toBe(false);
-      
+
       spy.mockRestore();
     });
   });
@@ -81,7 +83,7 @@ describe("OpenCodeEngine", () => {
       const engine = new OpenCodeEngine("primary", "fallback");
       engine.switchToFallback();
       expect(engine.model).toBe("fallback");
-      
+
       engine.resetToPrimary();
       expect(engine.model).toBe("primary");
       expect(engine.isUsingFallback()).toBe(false);
@@ -115,12 +117,12 @@ describe("OpenCodeEngine", () => {
           output: [],
           signal: null,
         });
-        
+
         const engine = new OpenCodeEngine();
         const result = await engine.run("test prompt");
-        
+
         expect(result.rateLimited).toBe(true);
-        
+
         spy.mockRestore();
       });
     }
@@ -172,12 +174,12 @@ describe("OpenCodeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new OpenCodeEngine();
       const result = await engine.run("test prompt");
-      
+
       expect(result.rateLimited).toBe(false);
-      
+
       spy.mockRestore();
     });
   });
@@ -192,19 +194,19 @@ describe("OpenCodeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new OpenCodeEngine("test-model");
       await engine.run("test prompt");
-      
+
       expect(spy).toHaveBeenCalledWith(
         "opencode",
         ["run", "--model", "test-model", "test prompt"],
         expect.objectContaining({
           encoding: "utf-8",
           maxBuffer: 50 * 1024 * 1024,
-        })
+        }),
       );
-      
+
       spy.mockRestore();
     });
 
@@ -217,14 +219,14 @@ describe("OpenCodeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new OpenCodeEngine();
       const result = await engine.run("test");
-      
+
       expect(result.success).toBe(true);
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain("Task completed");
-      
+
       spy.mockRestore();
     });
 
@@ -237,14 +239,14 @@ describe("OpenCodeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new OpenCodeEngine();
       const result = await engine.run("test");
-      
+
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
       expect(result.output).toContain("Error occurred");
-      
+
       spy.mockRestore();
     });
 
@@ -257,13 +259,13 @@ describe("OpenCodeEngine", () => {
         output: [],
         signal: null,
       });
-      
+
       const engine = new OpenCodeEngine();
       const result = await engine.run("test");
-      
+
       expect(result.output).toContain("stdout content");
       expect(result.output).toContain("stderr content");
-      
+
       spy.mockRestore();
     });
 
@@ -276,13 +278,13 @@ describe("OpenCodeEngine", () => {
         output: [],
         signal: "SIGTERM",
       });
-      
+
       const engine = new OpenCodeEngine();
       const result = await engine.run("test");
-      
+
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
-      
+
       spy.mockRestore();
     });
   });

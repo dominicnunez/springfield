@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
-  readProgress,
-  appendProgress,
   appendFailure,
-  initProgress,
+  appendProgress,
   getProgressFile,
   type IterationResult,
+  initProgress,
+  readProgress,
 } from "../progress.js";
 
 describe("tasks/progress", () => {
@@ -58,10 +58,10 @@ describe("tasks/progress", () => {
         message: "Done",
       });
       const contentBefore = readFileSync(progressFile, "utf-8");
-      
+
       initProgress(progressDir, progressFile);
       const contentAfter = readFileSync(progressFile, "utf-8");
-      
+
       expect(contentAfter).toBe(contentBefore);
     });
   });
@@ -86,10 +86,10 @@ describe("tasks/progress", () => {
         success: true,
         message: "Feature implemented successfully",
       };
-      
+
       appendProgress(progressFile, result);
       const content = readProgress(progressFile);
-      
+
       expect(content).toContain("## Iteration 1 - Add feature X");
       expect(content).toContain("Status: SUCCESS");
       expect(content).toContain("Feature implemented successfully");
@@ -103,10 +103,10 @@ describe("tasks/progress", () => {
         success: false,
         message: "Tests still failing",
       };
-      
+
       appendProgress(progressFile, result);
       const content = readProgress(progressFile);
-      
+
       expect(content).toContain("## Iteration 2 - Fix bug Y");
       expect(content).toContain("Status: FAILED");
       expect(content).toContain("Tests still failing");
@@ -121,10 +121,10 @@ describe("tasks/progress", () => {
         message: "Tests added",
         testFile: "src/__tests__/feature.test.ts",
       };
-      
+
       appendProgress(progressFile, result);
       const content = readProgress(progressFile);
-      
+
       expect(content).toContain("Test file: src/__tests__/feature.test.ts");
     });
 
@@ -137,34 +137,34 @@ describe("tasks/progress", () => {
         message: "Refactored",
         filesChanged: ["src/a.ts", "src/b.ts", "src/c.ts"],
       };
-      
+
       appendProgress(progressFile, result);
       const content = readProgress(progressFile);
-      
+
       expect(content).toContain("Files changed: src/a.ts, src/b.ts, src/c.ts");
     });
 
     test("appends multiple iterations in order", () => {
       initProgress(progressDir, progressFile);
-      
+
       appendProgress(progressFile, {
         iteration: 1,
         taskName: "Task 1",
         success: true,
         message: "Done 1",
       });
-      
+
       appendProgress(progressFile, {
         iteration: 2,
         taskName: "Task 2",
         success: true,
         message: "Done 2",
       });
-      
+
       const content = readProgress(progressFile);
       const idx1 = content.indexOf("Iteration 1");
       const idx2 = content.indexOf("Iteration 2");
-      
+
       expect(idx1).toBeLessThan(idx2);
     });
   });
@@ -173,7 +173,7 @@ describe("tasks/progress", () => {
     test("appends failure with reason", () => {
       initProgress(progressDir, progressFile);
       appendFailure(progressFile, 3, "Tests did not pass");
-      
+
       const content = readProgress(progressFile);
       expect(content).toContain("## FAILED - Iteration 3");
       expect(content).toContain("Reason: Tests did not pass");
@@ -181,8 +181,13 @@ describe("tasks/progress", () => {
 
     test("includes details when provided", () => {
       initProgress(progressDir, progressFile);
-      appendFailure(progressFile, 4, "Build failed", "Missing dependency: lodash");
-      
+      appendFailure(
+        progressFile,
+        4,
+        "Build failed",
+        "Missing dependency: lodash",
+      );
+
       const content = readProgress(progressFile);
       expect(content).toContain("## FAILED - Iteration 4");
       expect(content).toContain("Reason: Build failed");
@@ -192,7 +197,7 @@ describe("tasks/progress", () => {
     test("omits details line when not provided", () => {
       initProgress(progressDir, progressFile);
       appendFailure(progressFile, 5, "Unknown error");
-      
+
       const content = readProgress(progressFile);
       expect(content).toContain("Reason: Unknown error");
       expect(content).not.toContain("Details:");

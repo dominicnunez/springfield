@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import type { Engine, EngineResult } from "./base.js";
 import { logWarning } from "../ui/logger.js";
+import type { Engine, EngineResult } from "./base.js";
 
 // Hard rate limit patterns: quota exhausted, billing issues - won't recover with waiting
 const HARD_RATE_LIMIT_PATTERNS = [
@@ -26,7 +26,7 @@ const SOFT_RATE_LIMIT_PATTERNS = [
 export class OpenCodeEngine implements Engine {
   name = "opencode";
   model: string;
-  
+
   private primaryModel: string;
   private fallbackModel: string | undefined;
   private usingFallback = false;
@@ -53,7 +53,7 @@ export class OpenCodeEngine implements Engine {
     });
 
     const output = (result.stdout || "") + (result.stderr || "");
-    
+
     // Stream output to console
     if (result.stdout) {
       process.stdout.write(result.stdout);
@@ -81,14 +81,14 @@ export class OpenCodeEngine implements Engine {
    * Check if output indicates hard rate limiting (quota/billing - immediate fallback)
    */
   private isHardRateLimited(output: string): boolean {
-    return HARD_RATE_LIMIT_PATTERNS.some(pattern => pattern.test(output));
+    return HARD_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(output));
   }
 
   /**
    * Check if output indicates soft rate limiting (temporary - retry first)
    */
   private isSoftRateLimited(output: string): boolean {
-    return SOFT_RATE_LIMIT_PATTERNS.some(pattern => pattern.test(output));
+    return SOFT_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(output));
   }
 
   /**
@@ -96,14 +96,16 @@ export class OpenCodeEngine implements Engine {
    */
   switchToFallback(): boolean {
     if (this.fallbackModel && !this.usingFallback) {
-      logWarning(`Rate limit on ${this.model}, switching to fallback: ${this.fallbackModel}`);
+      logWarning(
+        `Rate limit on ${this.model}, switching to fallback: ${this.fallbackModel}`,
+      );
       console.log("");
       console.log("===========================================");
       console.log(`  Rate limit detected on ${this.model}`);
       console.log(`  Switching to fallback: ${this.fallbackModel}`);
       console.log("===========================================");
       console.log("");
-      
+
       this.model = this.fallbackModel;
       this.usingFallback = true;
       return true;

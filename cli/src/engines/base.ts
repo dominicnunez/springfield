@@ -114,7 +114,10 @@ After completing your task, check PRD.md:
 - If tasks remain [ ], just end your response (next iteration will continue)`;
 }
 
-export function generateSingleTaskPrompt(task: string, options: PromptOptions): string {
+export function generateSingleTaskPrompt(
+  task: string,
+  options: PromptOptions,
+): string {
   const { skipCommit, progressFile } = options;
   const commitInstructions = skipCommit
     ? `- If tests PASS:
