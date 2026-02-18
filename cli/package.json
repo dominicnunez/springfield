@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "sfk": "./bin.js"
+    "sfk": "bin.js"
   },
   "files": [
     "dist",
