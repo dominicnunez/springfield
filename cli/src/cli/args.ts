@@ -1,6 +1,9 @@
 import { Command } from "commander";
 import { statSync } from "node:fs";
 import type { Config, EngineType } from "../config/loader.js";
+import type { AuditStep } from "./commands/audit.js";
+
+export type CommandType = "run" | "audit";
 
 export interface CliOptions {
   engine?: EngineType;
@@ -13,10 +16,20 @@ export interface CliOptions {
   prd?: string;
   verbose?: boolean;
   singleTask?: string;
+  auditAfter?: boolean;
+}
+
+export interface AuditCliOptions {
+  startStep?: AuditStep;
+  maxIterations?: number;
+  auditPrompt?: string;
+  verbose?: boolean;
 }
 
 export interface ParsedArgs {
+  command: CommandType;
   options: CliOptions;
+  auditOptions: AuditCliOptions;
 }
 
 const VERSION = "1.0.0";
@@ -32,12 +45,21 @@ function isDirectory(path: string): boolean {
 export function parseArgs(argv: string[]): ParsedArgs {
   const program = new Command();
 
+  let resolvedCommand: CommandType = "run";
+  const cliOptions: CliOptions = {};
+  const auditCliOptions: AuditCliOptions = {};
+
   program
-    .name("sfs")
-    .description("Autonomous AI coding agent with enforced test verification")
-    .version(VERSION)
+    .name("sfk")
+    .description("Springfield Kit — Autonomous AI coding agent with enforced test verification")
+    .version(VERSION);
+
+  // Default "run" command (also handles bare `sfk "task"` and `sfk`)
+  program
+    .command("run", { isDefault: true })
+    .description("Run the ralph coding loop (default)")
     .argument("[task]", "Single task to run (non-directory positional)")
-    .option("--engine <type>", "AI engine to use: opencode or claude", "opencode")
+    .option("--engine <type>", "AI engine to use: opencode or claude")
     .option("--opencode", "Use OpenCode engine (shortcut for --engine opencode)")
     .option("--claude", "Use Claude Code engine (shortcut for --engine claude)")
     .option("--model <name>", "Override the model for the selected engine")
@@ -46,38 +68,68 @@ export function parseArgs(argv: string[]): ParsedArgs {
     .option("--skip-commit", "Do not auto-commit changes")
     .option("--no-tests", "Skip test verification (not recommended)")
     .option("--test-cmd <cmd>", "Custom test command")
-    .option("--prd <path>", "Path to PRD.md file", "PRD.md")
-    .option("-v, --verbose", "Enable verbose output");
+    .option("--prd <path>", "Path to PRD.md file")
+    .option("--audit-after", "Run willie audit after all PRD tasks complete")
+    .option("-v, --verbose", "Enable verbose output")
+    .action((task, opts) => {
+      resolvedCommand = "run";
+
+      let engine: EngineType | undefined;
+      if (opts.claude) {
+        engine = "claude";
+      } else if (opts.opencode) {
+        engine = "opencode";
+      } else if (opts.engine === "claude" || opts.engine === "opencode") {
+        engine = opts.engine;
+      }
+
+      Object.assign(cliOptions, {
+        engine,
+        model: opts.model,
+        maxIterations: opts.maxIterations,
+        sleepSeconds: opts.sleep,
+        skipCommit: opts.skipCommit,
+        skipTestVerify: opts.tests === false,
+        testCmd: opts.testCmd,
+        prd: opts.prd,
+        verbose: opts.verbose,
+        auditAfter: opts.auditAfter,
+        singleTask: task && !isDirectory(task) ? task : undefined,
+      });
+    });
+
+  // Audit command
+  program
+    .command("audit")
+    .description("Run the willie audit loop")
+    .option("--step <step>", "Start from step: audit, validate, or fix", "audit")
+    .option("--max-iterations <n>", "Maximum audit iterations (0 = unlimited)", parseInt)
+    .option("--audit-prompt <path>", "Path to audit-prompt.md")
+    .option("-v, --verbose", "Enable verbose output")
+    .action((opts) => {
+      resolvedCommand = "audit";
+
+      const step = opts.step as AuditStep;
+      if (step && !["audit", "validate", "fix"].includes(step)) {
+        console.error(`Invalid step: ${step}. Must be audit, validate, or fix.`);
+        process.exit(1);
+      }
+
+      Object.assign(auditCliOptions, {
+        startStep: step,
+        maxIterations: opts.maxIterations,
+        auditPrompt: opts.auditPrompt,
+        verbose: opts.verbose,
+      });
+    });
 
   program.parse(argv);
-  const opts = program.opts();
-  const positionalArgs = program.args;
-  const firstArg = positionalArgs[0];
 
-  // Handle engine shortcuts
-  let engine: EngineType | undefined;
-  if (opts.claude) {
-    engine = "claude";
-  } else if (opts.opencode) {
-    engine = "opencode";
-  } else if (opts.engine === "claude" || opts.engine === "opencode") {
-    engine = opts.engine;
-  }
-
-  const options: CliOptions = {
-    engine,
-    model: opts.model,
-    maxIterations: opts.maxIterations,
-    sleepSeconds: opts.sleep,
-    skipCommit: opts.skipCommit,
-    skipTestVerify: opts.tests === false, // --no-tests sets tests to false
-    testCmd: opts.testCmd,
-    prd: opts.prd,
-    verbose: opts.verbose,
-    singleTask: firstArg && !isDirectory(firstArg) ? firstArg : undefined,
+  return {
+    command: resolvedCommand,
+    options: cliOptions,
+    auditOptions: auditCliOptions,
   };
-
-  return { options };
 }
 
 /**
@@ -92,7 +144,6 @@ export function mergeOptions(config: Config, cliOptions: CliOptions): Config {
   }
 
   if (cliOptions.model) {
-    // Model override applies to the current engine
     if (merged.engine === "claude") {
       merged.claudeModel = cliOptions.model;
     } else {
@@ -118,6 +169,10 @@ export function mergeOptions(config: Config, cliOptions: CliOptions): Config {
 
   if (cliOptions.testCmd) {
     merged.testCmd = cliOptions.testCmd;
+  }
+
+  if (cliOptions.auditAfter) {
+    merged.auditAfterComplete = true;
   }
 
   return merged;
