@@ -51,9 +51,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
   program
     .name("sfk")
-    .description(
-      "Springfield Kit — Autonomous AI development kit",
-    )
+    .description("Springfield Kit — Autonomous AI development kit")
     .version(VERSION);
 
   // Default "run" command (also handles bare `sfk "task"` and `sfk`)
