@@ -71,7 +71,7 @@ run_claude() {
   log "Running step: $step_name (log: $log_file)"
   cd "$PROJECT_DIR"
 
-  script -q /dev/null -c "claude --print --model opus --dangerously-skip-permissions -p \"$prompt\"" > "$log_file" 2>&1
+  script -q /dev/null -c "claude --model opus --dangerously-skip-permissions -p \"$prompt\"" > "$log_file" 2>&1
   local exit_code=$?
 
   if [[ $exit_code -ne 0 ]]; then
