@@ -3,20 +3,15 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 
 export type EngineType = "opencode" | "claude";
+export type EffortLevel = "high" | "medium" | "low";
 
 export interface Config {
   // Engine
   engine: EngineType;
 
-  // General
-  maxIterations: number;
-  sleepSeconds: number;
-  skipCommit: boolean;
-
-  // Claude
+  // General defaults
   claudeModel: string;
-
-  // OpenCode
+  claudeEffort: EffortLevel;
   ocPrimeModel: string;
   ocFallModel: string | undefined;
 
@@ -24,144 +19,107 @@ export interface Config {
   softLimitRetries: number;
   softLimitWait: number;
 
-  // Test verification
-  testCmd: string | undefined;
+  // Ralph
+  maxIterations: number;
+  sleepSeconds: number;
+  skipCommit: boolean;
+  pushAfterCommit: boolean;
   skipTestVerify: boolean;
   maxConsecutiveFailures: number;
+  testCmd: string | undefined;
+  ralphModel: string | undefined;
+  ralphEffort: EffortLevel | undefined;
+
+  // Willie
+  willieMaxIterations: number;
+  willieAuditPrompt: string;
+  willieModel: string | undefined;
+  willieEffort: EffortLevel | undefined;
 
   // Logging
   logDir: string;
-
-  // Progress
   progressDir: string;
 
-  // BTCA (Better Context App)
+  // BTCA
   btcaEnabled: boolean;
   btcaResources: string[];
+
+  // Chaining
+  auditAfterComplete: boolean;
 }
 
 // Config file paths
-const GLOBAL_CONFIG_DIR = join(homedir(), ".config", "ralph");
-const GLOBAL_CONFIG_FILE = join(GLOBAL_CONFIG_DIR, "ralph.env");
-const PROJECT_CONFIG_DIR = ".ralph";
-const PROJECT_CONFIG_FILE = join(PROJECT_CONFIG_DIR, "ralph.env");
+const GLOBAL_CONFIG_DIR = join(homedir(), ".config", "sfk");
+const GLOBAL_CONFIG_FILE = join(GLOBAL_CONFIG_DIR, "config");
+const PROJECT_CONFIG_DIR = ".sfk";
+const PROJECT_CONFIG_FILE = join(PROJECT_CONFIG_DIR, "config");
 
-// Default config content (used for self-healing)
-const DEFAULT_CONFIG_CONTENT = `# Ralph Global Configuration
-# Created by: npm install -g sfs-cli
-#
-# Override per-project: .ralph/ralph.env
-# Docs: https://github.com/dominicnunez/ralph
+// Legacy paths (for migration detection)
+const LEGACY_GLOBAL_DIR = join(homedir(), ".config", "ralph");
+const LEGACY_GLOBAL_FILE = join(LEGACY_GLOBAL_DIR, "ralph.env");
+const LEGACY_PROJECT_FILE = join(".ralph", "ralph.env");
 
-# ─────────────────────────────────────────────────────────────
-# Engine Selection
-# ─────────────────────────────────────────────────────────────
+const DEFAULT_CONFIG_CONTENT = `# SFK Configuration
+# Override per-project: .sfk/config
 
-# AI engine: "opencode" or "claude"
-ENGINE=opencode
+[engine]
+type = opencode
 
-# ─────────────────────────────────────────────────────────────
-# Model Settings
-# ─────────────────────────────────────────────────────────────
+[models]
+claude = sonnet
+claude-effort = high
+opencode-primary = big-pickle
+# opencode-fallback =
 
-# Claude model (sonnet balances cost/capability)
-# Options: opus, sonnet, haiku
-CLAUDE_MODEL=sonnet
+[rate-limits]
+soft-retries = 3
+soft-wait = 30
 
-# OpenCode models
-# Primary model (big-pickle is free tier)
-OC_PRIME_MODEL=big-pickle
+[ralph]
+max-iterations = 10
+sleep-seconds = 2
+skip-commit = false
+push-after-commit = false
+skip-test-verify = false
+max-consecutive-failures = 3
+# test-cmd =
+# model = sonnet
+# effort = high
 
-# Fallback model when primary hits rate limits (optional)
-# OC_FALL_MODEL=
+[willie]
+max-iterations = 0
+# audit-prompt = audit-prompt.md
+# model = opus
+# effort = high
 
-# ─────────────────────────────────────────────────────────────
-# Rate Limit Settings (OpenCode only)
-# ─────────────────────────────────────────────────────────────
+[logging]
+# log-dir = ~/.sfk/logs
+# progress-dir = ~/.sfk/progress
 
-# Number of retries for soft rate limits (per-minute cooldowns)
-# before switching to fallback model
-SOFT_LIMIT_RETRIES=3
-
-# Base wait time in seconds for soft rate limit backoff
-# Actual wait: base * 2^attempt (30s, 60s, 120s)
-SOFT_LIMIT_WAIT=30
-
-# ─────────────────────────────────────────────────────────────
-# Iteration Settings
-# ─────────────────────────────────────────────────────────────
-
-# Maximum iterations (-1 = infinite, run until all tasks complete)
-MAX_ITERATIONS=10
-
-# Seconds to pause between iterations
-SLEEP_SECONDS=2
-
-# ─────────────────────────────────────────────────────────────
-# Behavior Settings
-# ─────────────────────────────────────────────────────────────
-
-# Skip git commits (1 = don't commit, useful for testing)
-SKIP_COMMIT=0
-
-# Skip test verification (1 = don't check for tests, not recommended)
-SKIP_TEST_VERIFY=0
-
-# Maximum consecutive failures before stopping (default: 3)
-# Only counts failures on the SAME task - resets when task changes
-MAX_CONSECUTIVE_FAILURES=3
-
-# ─────────────────────────────────────────────────────────────
-# Test Settings
-# ─────────────────────────────────────────────────────────────
-
-# Test command - how Ralph runs your tests after each task
-# Auto-detected from: package.json, vitest, jest, pytest, go, cargo
-# Set manually if auto-detection fails or you need a custom command
-# Examples: "npm run test:ci", "pytest -x", "go test ./... -v"
-# TEST_CMD=
-
-# ─────────────────────────────────────────────────────────────
-# Logging Settings
-# ─────────────────────────────────────────────────────────────
-
-# Log directory for Ralph session logs
-# Default: ~/.ralph/logs
-# Logs are named: ralph-<projectname>.log
-# RALPH_LOG_DIR=
-
-# Progress directory for Ralph progress tracking
-# Default: ~/.ralph/progress
-# Progress files are named: progress-<projectname>.log
-# RALPH_PROGRESS_DIR=
-
-# ─────────────────────────────────────────────────────────────
-# BTCA (Better Context App) Settings
-# ─────────────────────────────────────────────────────────────
-
-# Enable btca for documentation lookups (1 = enabled)
-# When enabled, Ralph will be instructed to use btca for API/library questions
-BTCA_ENABLED=0
-
-# Comma-separated list of btca resources for this project
-# These are passed to the agent in the prompt
-# Use resources from btca.dev/resources or custom git repos
-# Examples: "svelte,sveltekit,tailwind" or "gin,sqlx,go"
-# BTCA_RESOURCES=
+[btca]
+enabled = false
+# resources =
 `;
 
 /**
- * Parse a simple .env file format
+ * Parse INI-style config file with [section] headers.
+ * Returns flat map with keys like "section.key".
  */
-function parseEnvFile(content: string): Record<string, string> {
+function parseConfigFile(content: string): Record<string, string> {
   const result: Record<string, string> = {};
-  const lines = content.split("\n");
+  let currentSection = "";
 
-  for (const line of lines) {
+  for (const line of content.split("\n")) {
     const trimmed = line.trim();
-    
-    // Skip comments and empty lines
+
     if (!trimmed || trimmed.startsWith("#")) continue;
+
+    // Section header
+    const sectionMatch = trimmed.match(/^\[([a-z-]+)\]$/);
+    if (sectionMatch) {
+      currentSection = sectionMatch[1];
+      continue;
+    }
 
     const eqIndex = trimmed.indexOf("=");
     if (eqIndex === -1) continue;
@@ -170,8 +128,40 @@ function parseEnvFile(content: string): Record<string, string> {
     let value = trimmed.slice(eqIndex + 1).trim();
 
     // Remove quotes if present
-    if ((value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))) {
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    const fullKey = currentSection ? `${currentSection}.${key}` : key;
+    result[fullKey] = value;
+  }
+
+  return result;
+}
+
+/**
+ * Parse a simple .env file format (legacy support)
+ */
+function parseEnvFile(content: string): Record<string, string> {
+  const result: Record<string, string> = {};
+
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const eqIndex = trimmed.indexOf("=");
+    if (eqIndex === -1) continue;
+
+    const key = trimmed.slice(0, eqIndex).trim();
+    let value = trimmed.slice(eqIndex + 1).trim();
+
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
       value = value.slice(1, -1);
     }
 
@@ -181,80 +171,168 @@ function parseEnvFile(content: string): Record<string, string> {
   return result;
 }
 
+function parseBool(value: string): boolean | undefined {
+  if (value === "true" || value === "1") return true;
+  if (value === "false" || value === "0") return false;
+  return undefined;
+}
+
+function parseEffort(value: string): EffortLevel | undefined {
+  if (value === "high" || value === "medium" || value === "low") return value;
+  return undefined;
+}
+
 /**
- * Apply env values to config object
+ * Apply parsed INI config values to Config object
  */
-function applyEnvToConfig(config: Config, env: Record<string, string>): void {
-  // Engine
-  if (env.ENGINE === "claude" || env.ENGINE === "opencode") {
+function applyConfigToConfig(
+  config: Config,
+  parsed: Record<string, string>
+): void {
+  // [engine]
+  const engineType = parsed["engine.type"];
+  if (engineType === "claude" || engineType === "opencode") {
+    config.engine = engineType;
+  }
+
+  // [models]
+  if (parsed["models.claude"]) config.claudeModel = parsed["models.claude"];
+  if (parsed["models.claude-effort"]) {
+    const effort = parseEffort(parsed["models.claude-effort"]);
+    if (effort) config.claudeEffort = effort;
+  }
+  if (parsed["models.opencode-primary"])
+    config.ocPrimeModel = parsed["models.opencode-primary"];
+  if (parsed["models.opencode-fallback"]?.trim())
+    config.ocFallModel = parsed["models.opencode-fallback"];
+
+  // [rate-limits]
+  if (parsed["rate-limits.soft-retries"])
+    config.softLimitRetries = parseInt(parsed["rate-limits.soft-retries"], 10);
+  if (parsed["rate-limits.soft-wait"])
+    config.softLimitWait = parseInt(parsed["rate-limits.soft-wait"], 10);
+
+  // [ralph]
+  if (parsed["ralph.max-iterations"])
+    config.maxIterations = parseInt(parsed["ralph.max-iterations"], 10);
+  if (parsed["ralph.sleep-seconds"])
+    config.sleepSeconds = parseInt(parsed["ralph.sleep-seconds"], 10);
+  const skipCommit = parsed["ralph.skip-commit"];
+  if (skipCommit !== undefined) {
+    const val = parseBool(skipCommit);
+    if (val !== undefined) config.skipCommit = val;
+  }
+  const pushAfterCommit = parsed["ralph.push-after-commit"];
+  if (pushAfterCommit !== undefined) {
+    const val = parseBool(pushAfterCommit);
+    if (val !== undefined) config.pushAfterCommit = val;
+  }
+  const skipTestVerify = parsed["ralph.skip-test-verify"];
+  if (skipTestVerify !== undefined) {
+    const val = parseBool(skipTestVerify);
+    if (val !== undefined) config.skipTestVerify = val;
+  }
+  if (parsed["ralph.max-consecutive-failures"])
+    config.maxConsecutiveFailures = parseInt(
+      parsed["ralph.max-consecutive-failures"],
+      10
+    );
+  if (parsed["ralph.test-cmd"]?.trim())
+    config.testCmd = parsed["ralph.test-cmd"];
+  if (parsed["ralph.model"]) config.ralphModel = parsed["ralph.model"];
+  if (parsed["ralph.effort"]) {
+    const effort = parseEffort(parsed["ralph.effort"]);
+    if (effort) config.ralphEffort = effort;
+  }
+  const auditAfter = parsed["ralph.audit-after-complete"];
+  if (auditAfter !== undefined) {
+    const val = parseBool(auditAfter);
+    if (val !== undefined) config.auditAfterComplete = val;
+  }
+
+  // [willie]
+  if (parsed["willie.max-iterations"])
+    config.willieMaxIterations = parseInt(
+      parsed["willie.max-iterations"],
+      10
+    );
+  if (parsed["willie.audit-prompt"]?.trim())
+    config.willieAuditPrompt = parsed["willie.audit-prompt"];
+  if (parsed["willie.model"]) config.willieModel = parsed["willie.model"];
+  if (parsed["willie.effort"]) {
+    const effort = parseEffort(parsed["willie.effort"]);
+    if (effort) config.willieEffort = effort;
+  }
+
+  // [logging]
+  if (parsed["logging.log-dir"]?.trim())
+    config.logDir = parsed["logging.log-dir"];
+  if (parsed["logging.progress-dir"]?.trim())
+    config.progressDir = parsed["logging.progress-dir"];
+
+  // [btca]
+  const btcaEnabled = parsed["btca.enabled"];
+  if (btcaEnabled !== undefined) {
+    const val = parseBool(btcaEnabled);
+    if (val !== undefined) config.btcaEnabled = val;
+  }
+  if (parsed["btca.resources"]?.trim()) {
+    config.btcaResources = parsed["btca.resources"]
+      .split(",")
+      .map((r) => r.trim())
+      .filter((r) => r);
+  }
+}
+
+/**
+ * Apply legacy .env values to config object
+ */
+function applyEnvToConfig(
+  config: Config,
+  env: Record<string, string>
+): void {
+  if (env.ENGINE === "claude" || env.ENGINE === "opencode")
     config.engine = env.ENGINE;
-  }
-
-  // General
-  if (env.MAX_ITERATIONS) {
+  if (env.MAX_ITERATIONS)
     config.maxIterations = parseInt(env.MAX_ITERATIONS, 10);
-  }
-  if (env.SLEEP_SECONDS) {
+  if (env.SLEEP_SECONDS)
     config.sleepSeconds = parseInt(env.SLEEP_SECONDS, 10);
+  if (env.SKIP_COMMIT !== undefined) {
+    const val = parseBool(env.SKIP_COMMIT);
+    if (val !== undefined) config.skipCommit = val;
   }
-  if (env.SKIP_COMMIT === "1" || env.SKIP_COMMIT === "true") {
-    config.skipCommit = true;
-  } else if (env.SKIP_COMMIT === "0" || env.SKIP_COMMIT === "false") {
-    config.skipCommit = false;
+  if (env.PUSH_AFTER_COMMIT !== undefined) {
+    const val = parseBool(env.PUSH_AFTER_COMMIT);
+    if (val !== undefined) config.pushAfterCommit = val;
   }
-
-  // Claude
-  if (env.CLAUDE_MODEL) {
-    config.claudeModel = env.CLAUDE_MODEL;
-  }
-
-  // OpenCode
-  if (env.OC_PRIME_MODEL) {
-    config.ocPrimeModel = env.OC_PRIME_MODEL;
-  }
-  if (env.OC_FALL_MODEL && env.OC_FALL_MODEL.trim()) {
-    config.ocFallModel = env.OC_FALL_MODEL;
-  }
-
-  // Rate limit settings
-  if (env.SOFT_LIMIT_RETRIES) {
+  if (env.CLAUDE_MODEL) config.claudeModel = env.CLAUDE_MODEL;
+  if (env.OC_PRIME_MODEL) config.ocPrimeModel = env.OC_PRIME_MODEL;
+  if (env.OC_FALL_MODEL?.trim()) config.ocFallModel = env.OC_FALL_MODEL;
+  if (env.SOFT_LIMIT_RETRIES)
     config.softLimitRetries = parseInt(env.SOFT_LIMIT_RETRIES, 10);
-  }
-  if (env.SOFT_LIMIT_WAIT) {
+  if (env.SOFT_LIMIT_WAIT)
     config.softLimitWait = parseInt(env.SOFT_LIMIT_WAIT, 10);
+  if (env.TEST_CMD?.trim()) config.testCmd = env.TEST_CMD;
+  if (env.SKIP_TEST_VERIFY !== undefined) {
+    const val = parseBool(env.SKIP_TEST_VERIFY);
+    if (val !== undefined) config.skipTestVerify = val;
   }
-
-  // Test verification
-  if (env.TEST_CMD && env.TEST_CMD.trim()) {
-    config.testCmd = env.TEST_CMD;
-  }
-  if (env.SKIP_TEST_VERIFY === "1" || env.SKIP_TEST_VERIFY === "true") {
-    config.skipTestVerify = true;
-  } else if (env.SKIP_TEST_VERIFY === "0" || env.SKIP_TEST_VERIFY === "false") {
-    config.skipTestVerify = false;
-  }
-  if (env.MAX_CONSECUTIVE_FAILURES) {
-    config.maxConsecutiveFailures = parseInt(env.MAX_CONSECUTIVE_FAILURES, 10);
-  }
-
-  // Logging
-  if (env.RALPH_LOG_DIR && env.RALPH_LOG_DIR.trim()) {
-    config.logDir = env.RALPH_LOG_DIR;
-  }
-
-  // Progress
-  if (env.RALPH_PROGRESS_DIR && env.RALPH_PROGRESS_DIR.trim()) {
+  if (env.MAX_CONSECUTIVE_FAILURES)
+    config.maxConsecutiveFailures = parseInt(
+      env.MAX_CONSECUTIVE_FAILURES,
+      10
+    );
+  if (env.RALPH_LOG_DIR?.trim()) config.logDir = env.RALPH_LOG_DIR;
+  if (env.RALPH_PROGRESS_DIR?.trim())
     config.progressDir = env.RALPH_PROGRESS_DIR;
+  if (env.BTCA_ENABLED !== undefined) {
+    const val = parseBool(env.BTCA_ENABLED);
+    if (val !== undefined) config.btcaEnabled = val;
   }
-
-  // BTCA
-  if (env.BTCA_ENABLED === "1" || env.BTCA_ENABLED === "true") {
-    config.btcaEnabled = true;
-  } else if (env.BTCA_ENABLED === "0" || env.BTCA_ENABLED === "false") {
-    config.btcaEnabled = false;
-  }
-  if (env.BTCA_RESOURCES && env.BTCA_RESOURCES.trim()) {
-    config.btcaResources = env.BTCA_RESOURCES.split(",").map(r => r.trim()).filter(r => r);
+  if (env.BTCA_RESOURCES?.trim()) {
+    config.btcaResources = env.BTCA_RESOURCES.split(",")
+      .map((r) => r.trim())
+      .filter((r) => r);
   }
 }
 
@@ -271,68 +349,142 @@ function ensureGlobalConfig(): void {
 }
 
 /**
- * Load config with priority:
- * 1. CLI arguments (handled separately in args.ts)
- * 2. Environment variables
- * 3. Project config (.ralph/ralph.env)
- * 4. Global config (~/.config/ralph/ralph.env)
+ * Check for legacy config and warn
  */
-export function loadConfig(): Config {
-  // Ensure global config exists (self-healing)
-  ensureGlobalConfig();
+function checkLegacyConfig(): boolean {
+  const legacyGlobal = existsSync(LEGACY_GLOBAL_FILE);
+  const legacyProject = existsSync(
+    join(process.cwd(), LEGACY_PROJECT_FILE)
+  );
 
-  // Start with empty config - will be filled from global config
-  const config: Config = {
+  if (legacyGlobal || legacyProject) {
+    const locations: string[] = [];
+    if (legacyGlobal) locations.push(LEGACY_GLOBAL_FILE);
+    if (legacyProject) locations.push(LEGACY_PROJECT_FILE);
+    console.warn(
+      `[WARN] Found legacy config: ${locations.join(", ")}\n` +
+        `       Migrate to new format at ${GLOBAL_CONFIG_FILE}\n` +
+        `       See config.example for the new INI format.`
+    );
+    return true;
+  }
+  return false;
+}
+
+function defaultConfig(): Config {
+  return {
     engine: "opencode",
-    maxIterations: 10,
-    sleepSeconds: 2,
-    skipCommit: false,
     claudeModel: "sonnet",
+    claudeEffort: "high",
     ocPrimeModel: "big-pickle",
     ocFallModel: undefined,
     softLimitRetries: 3,
     softLimitWait: 30,
-    testCmd: undefined,
+    maxIterations: 10,
+    sleepSeconds: 2,
+    skipCommit: false,
+    pushAfterCommit: false,
     skipTestVerify: false,
     maxConsecutiveFailures: 3,
-    logDir: join(homedir(), ".ralph", "logs"),
-    progressDir: join(homedir(), ".ralph", "progress"),
+    testCmd: undefined,
+    ralphModel: undefined,
+    ralphEffort: undefined,
+    willieMaxIterations: 0,
+    willieAuditPrompt: "audit-prompt.md",
+    willieModel: undefined,
+    willieEffort: undefined,
+    logDir: join(homedir(), ".sfk", "logs"),
+    progressDir: join(homedir(), ".sfk", "progress"),
     btcaEnabled: false,
     btcaResources: [],
+    auditAfterComplete: false,
   };
+}
 
-  // Load global config (always exists due to self-healing)
-  const globalContent = readFileSync(GLOBAL_CONFIG_FILE, "utf-8");
-  const globalEnv = parseEnvFile(globalContent);
-  applyEnvToConfig(config, globalEnv);
+/**
+ * Load config with priority:
+ * 1. CLI arguments (handled separately in args.ts)
+ * 2. Environment variables
+ * 3. Project config (.sfk/config)
+ * 4. Global config (~/.config/sfk/config)
+ *
+ * Falls back to legacy .env format if new config doesn't exist.
+ */
+export function loadConfig(): Config {
+  const config = defaultConfig();
 
-  // Load project config if exists (overrides global)
-  const projectConfigPath = join(process.cwd(), PROJECT_CONFIG_FILE);
-  if (existsSync(projectConfigPath)) {
-    const projectContent = readFileSync(projectConfigPath, "utf-8");
-    const projectEnv = parseEnvFile(projectContent);
-    applyEnvToConfig(config, projectEnv);
+  const hasNewGlobal = existsSync(GLOBAL_CONFIG_FILE);
+  const hasNewProject = existsSync(
+    join(process.cwd(), PROJECT_CONFIG_FILE)
+  );
+  const hasLegacy = checkLegacyConfig();
+
+  if (hasNewGlobal || hasNewProject) {
+    // New INI format
+    ensureGlobalConfig();
+
+    const globalContent = readFileSync(GLOBAL_CONFIG_FILE, "utf-8");
+    applyConfigToConfig(config, parseConfigFile(globalContent));
+
+    const projectPath = join(process.cwd(), PROJECT_CONFIG_FILE);
+    if (existsSync(projectPath)) {
+      const projectContent = readFileSync(projectPath, "utf-8");
+      applyConfigToConfig(config, parseConfigFile(projectContent));
+    }
+  } else if (hasLegacy) {
+    // Fall back to legacy .env format
+    if (existsSync(LEGACY_GLOBAL_FILE)) {
+      const content = readFileSync(LEGACY_GLOBAL_FILE, "utf-8");
+      applyEnvToConfig(config, parseEnvFile(content));
+    }
+    const legacyProjectPath = join(process.cwd(), LEGACY_PROJECT_FILE);
+    if (existsSync(legacyProjectPath)) {
+      const content = readFileSync(legacyProjectPath, "utf-8");
+      applyEnvToConfig(config, parseEnvFile(content));
+    }
+  } else {
+    // No config at all — create new global config
+    ensureGlobalConfig();
+    const globalContent = readFileSync(GLOBAL_CONFIG_FILE, "utf-8");
+    applyConfigToConfig(config, parseConfigFile(globalContent));
   }
 
-  // Environment variables override everything
+  // Environment variables override everything (use legacy env var names for compat)
   const processEnv: Record<string, string> = {};
   if (process.env.ENGINE) processEnv.ENGINE = process.env.ENGINE;
-  if (process.env.MAX_ITERATIONS) processEnv.MAX_ITERATIONS = process.env.MAX_ITERATIONS;
-  if (process.env.SLEEP_SECONDS) processEnv.SLEEP_SECONDS = process.env.SLEEP_SECONDS;
-  if (process.env.SKIP_COMMIT) processEnv.SKIP_COMMIT = process.env.SKIP_COMMIT;
-  if (process.env.CLAUDE_MODEL) processEnv.CLAUDE_MODEL = process.env.CLAUDE_MODEL;
-  if (process.env.OC_PRIME_MODEL) processEnv.OC_PRIME_MODEL = process.env.OC_PRIME_MODEL;
-  if (process.env.OC_FALL_MODEL) processEnv.OC_FALL_MODEL = process.env.OC_FALL_MODEL;
-  if (process.env.SOFT_LIMIT_RETRIES) processEnv.SOFT_LIMIT_RETRIES = process.env.SOFT_LIMIT_RETRIES;
-  if (process.env.SOFT_LIMIT_WAIT) processEnv.SOFT_LIMIT_WAIT = process.env.SOFT_LIMIT_WAIT;
+  if (process.env.MAX_ITERATIONS)
+    processEnv.MAX_ITERATIONS = process.env.MAX_ITERATIONS;
+  if (process.env.SLEEP_SECONDS)
+    processEnv.SLEEP_SECONDS = process.env.SLEEP_SECONDS;
+  if (process.env.SKIP_COMMIT)
+    processEnv.SKIP_COMMIT = process.env.SKIP_COMMIT;
+  if (process.env.PUSH_AFTER_COMMIT)
+    processEnv.PUSH_AFTER_COMMIT = process.env.PUSH_AFTER_COMMIT;
+  if (process.env.CLAUDE_MODEL)
+    processEnv.CLAUDE_MODEL = process.env.CLAUDE_MODEL;
+  if (process.env.OC_PRIME_MODEL)
+    processEnv.OC_PRIME_MODEL = process.env.OC_PRIME_MODEL;
+  if (process.env.OC_FALL_MODEL)
+    processEnv.OC_FALL_MODEL = process.env.OC_FALL_MODEL;
+  if (process.env.SOFT_LIMIT_RETRIES)
+    processEnv.SOFT_LIMIT_RETRIES = process.env.SOFT_LIMIT_RETRIES;
+  if (process.env.SOFT_LIMIT_WAIT)
+    processEnv.SOFT_LIMIT_WAIT = process.env.SOFT_LIMIT_WAIT;
   if (process.env.TEST_CMD) processEnv.TEST_CMD = process.env.TEST_CMD;
-  if (process.env.SKIP_TEST_VERIFY) processEnv.SKIP_TEST_VERIFY = process.env.SKIP_TEST_VERIFY;
-  if (process.env.MAX_CONSECUTIVE_FAILURES) processEnv.MAX_CONSECUTIVE_FAILURES = process.env.MAX_CONSECUTIVE_FAILURES;
-  if (process.env.RALPH_LOG_DIR) processEnv.RALPH_LOG_DIR = process.env.RALPH_LOG_DIR;
-  if (process.env.RALPH_PROGRESS_DIR) processEnv.RALPH_PROGRESS_DIR = process.env.RALPH_PROGRESS_DIR;
-  if (process.env.BTCA_ENABLED) processEnv.BTCA_ENABLED = process.env.BTCA_ENABLED;
-  if (process.env.BTCA_RESOURCES) processEnv.BTCA_RESOURCES = process.env.BTCA_RESOURCES;
-  
+  if (process.env.SKIP_TEST_VERIFY)
+    processEnv.SKIP_TEST_VERIFY = process.env.SKIP_TEST_VERIFY;
+  if (process.env.MAX_CONSECUTIVE_FAILURES)
+    processEnv.MAX_CONSECUTIVE_FAILURES =
+      process.env.MAX_CONSECUTIVE_FAILURES;
+  if (process.env.RALPH_LOG_DIR)
+    processEnv.RALPH_LOG_DIR = process.env.RALPH_LOG_DIR;
+  if (process.env.RALPH_PROGRESS_DIR)
+    processEnv.RALPH_PROGRESS_DIR = process.env.RALPH_PROGRESS_DIR;
+  if (process.env.BTCA_ENABLED)
+    processEnv.BTCA_ENABLED = process.env.BTCA_ENABLED;
+  if (process.env.BTCA_RESOURCES)
+    processEnv.BTCA_RESOURCES = process.env.BTCA_RESOURCES;
+
   applyEnvToConfig(config, processEnv);
 
   return config;
@@ -346,15 +498,40 @@ export function getCurrentModel(config: Config): string {
 }
 
 /**
- * Get global config path (for documentation purposes)
+ * Get the effective model for ralph (per-agent override or global default)
  */
+export function getRalphModel(config: Config): string {
+  if (config.engine === "claude") {
+    return config.ralphModel ?? config.claudeModel;
+  }
+  return config.ocPrimeModel;
+}
+
+/**
+ * Get the effective effort level for ralph
+ */
+export function getRalphEffort(config: Config): EffortLevel {
+  return config.ralphEffort ?? config.claudeEffort;
+}
+
+/**
+ * Get the effective model for willie (defaults to opus)
+ */
+export function getWillieModel(config: Config): string {
+  return config.willieModel ?? "opus";
+}
+
+/**
+ * Get the effective effort level for willie
+ */
+export function getWillieEffort(config: Config): EffortLevel {
+  return config.willieEffort ?? config.claudeEffort;
+}
+
 export function getGlobalConfigPath(): string {
   return GLOBAL_CONFIG_FILE;
 }
 
-/**
- * Get project config path (for documentation purposes)
- */
 export function getProjectConfigPath(): string {
   return PROJECT_CONFIG_FILE;
 }

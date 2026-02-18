@@ -1,0 +1,49 @@
+# SFK Configuration
+#
+# Config locations (in priority order):
+#   1. CLI arguments
+#   2. Environment variables
+#   3. .sfk/config (project config)
+#   4. ~/.config/sfk/config (global config)
+#
+# To use:
+#   - For project config: mkdir -p .sfk && cp config.example .sfk/config
+#   - For global config: cp config.example ~/.config/sfk/config
+
+[engine]
+type = opencode
+
+[models]
+claude = sonnet
+claude-effort = high
+opencode-primary = big-pickle
+# opencode-fallback =
+
+[rate-limits]
+soft-retries = 3
+soft-wait = 30
+
+[ralph]
+max-iterations = 10
+sleep-seconds = 2
+skip-commit = false
+push-after-commit = false
+skip-test-verify = false
+max-consecutive-failures = 3
+# test-cmd =
+# model = sonnet
+# effort = high
+
+[willie]
+max-iterations = 0
+# audit-prompt = audit-prompt.md
+# model = opus
+# effort = high
+
+[logging]
+# log-dir = ~/.sfk/logs
+# progress-dir = ~/.sfk/progress
+
+[btca]
+enabled = false
+# resources =
