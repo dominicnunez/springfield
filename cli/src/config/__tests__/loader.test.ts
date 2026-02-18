@@ -1,336 +1,343 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { describe, expect, test } from "bun:test";
+import { homedir } from "node:os";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import type { Config } from "../loader.js";
+import {
+  parseConfigFile,
+  applyConfigToConfig,
+  getCurrentModel,
+  getRalphModel,
+  getRalphEffort,
+  getWillieModel,
+  getWillieEffort,
+} from "../loader.js";
 
-/**
- * Since loadConfig() reads from real filesystem and caches module state,
- * we test the underlying logic by recreating the parsing functions here.
- * This tests the same logic without filesystem side effects.
- */
-
-// Copied from loader.ts for isolated testing
-function parseEnvFile(content: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  const lines = content.split("\n");
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    
-    // Skip comments and empty lines
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    const eqIndex = trimmed.indexOf("=");
-    if (eqIndex === -1) continue;
-
-    const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-
-    // Remove quotes if present
-    if ((value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-
-    result[key] = value;
-  }
-
-  return result;
-}
-
-interface Config {
-  engine: "opencode" | "claude";
-  maxIterations: number;
-  sleepSeconds: number;
-  skipCommit: boolean;
-  claudeModel: string;
-  ocPrimeModel: string;
-  ocFallModel: string | undefined;
-  testCmd: string | undefined;
-  skipTestVerify: boolean;
-  logDir: string;
-  btcaEnabled: boolean;
-  btcaResources: string[];
-}
-
-function getDefaultConfig(): Config {
+function baseConfig(overrides: Partial<Config> = {}): Config {
   return {
     engine: "opencode",
+    claudeModel: "sonnet",
+    claudeEffort: "high",
+    ocPrimeModel: "big-pickle",
+    ocFallModel: undefined,
+    softLimitRetries: 3,
+    softLimitWait: 30,
     maxIterations: 10,
     sleepSeconds: 2,
     skipCommit: false,
-    claudeModel: "sonnet",
-    ocPrimeModel: "big-pickle",
-    ocFallModel: undefined,
-    testCmd: undefined,
+    pushAfterCommit: false,
     skipTestVerify: false,
-    logDir: "/tmp/logs",
-    btcaEnabled: false,
-    btcaResources: [],
+    maxConsecutiveFailures: 3,
+    testCmd: undefined,
+    ralphModel: undefined,
+    ralphEffort: undefined,
+    willieMaxIterations: 0,
+    willieAuditPrompt: undefined,
+    willieModel: undefined,
+    willieEffort: undefined,
+    logDir: join(homedir(), ".sfk", "logs"),
+    progressDir: join(homedir(), ".sfk", "progress"),
+    auditAfterComplete: false,
+    ...overrides,
   };
 }
 
-function applyEnvToConfig(config: Config, env: Record<string, string>): void {
-  // Engine
-  if (env.ENGINE === "claude" || env.ENGINE === "opencode") {
-    config.engine = env.ENGINE;
-  }
-
-  // General
-  if (env.MAX_ITERATIONS) {
-    config.maxIterations = parseInt(env.MAX_ITERATIONS, 10);
-  }
-  if (env.SLEEP_SECONDS) {
-    config.sleepSeconds = parseInt(env.SLEEP_SECONDS, 10);
-  }
-  if (env.SKIP_COMMIT === "1" || env.SKIP_COMMIT === "true") {
-    config.skipCommit = true;
-  } else if (env.SKIP_COMMIT === "0" || env.SKIP_COMMIT === "false") {
-    config.skipCommit = false;
-  }
-
-  // Claude
-  if (env.CLAUDE_MODEL) {
-    config.claudeModel = env.CLAUDE_MODEL;
-  }
-
-  // OpenCode
-  if (env.OC_PRIME_MODEL) {
-    config.ocPrimeModel = env.OC_PRIME_MODEL;
-  }
-  if (env.OC_FALL_MODEL && env.OC_FALL_MODEL.trim()) {
-    config.ocFallModel = env.OC_FALL_MODEL;
-  }
-
-  // Test verification
-  if (env.TEST_CMD && env.TEST_CMD.trim()) {
-    config.testCmd = env.TEST_CMD;
-  }
-  if (env.SKIP_TEST_VERIFY === "1" || env.SKIP_TEST_VERIFY === "true") {
-    config.skipTestVerify = true;
-  } else if (env.SKIP_TEST_VERIFY === "0" || env.SKIP_TEST_VERIFY === "false") {
-    config.skipTestVerify = false;
-  }
-
-  // BTCA
-  if (env.BTCA_ENABLED === "1" || env.BTCA_ENABLED === "true") {
-    config.btcaEnabled = true;
-  } else if (env.BTCA_ENABLED === "0" || env.BTCA_ENABLED === "false") {
-    config.btcaEnabled = false;
-  }
-  if (env.BTCA_RESOURCES && env.BTCA_RESOURCES.trim()) {
-    config.btcaResources = env.BTCA_RESOURCES.split(",").map(r => r.trim()).filter(r => r);
-  }
-}
-
 describe("config/loader", () => {
-  describe("parseEnvFile", () => {
-    test("parses simple key=value pairs", () => {
-      const content = `
-ENGINE=claude
-MAX_ITERATIONS=5
-SKIP_COMMIT=1
-`;
-      const result = parseEnvFile(content);
-      expect(result.ENGINE).toBe("claude");
-      expect(result.MAX_ITERATIONS).toBe("5");
-      expect(result.SKIP_COMMIT).toBe("1");
+  describe("parseConfigFile", () => {
+    test("parses section headers and key-value pairs", () => {
+      const result = parseConfigFile(`
+[engine]
+type = claude
+
+[ralph]
+max-iterations = 25
+`);
+      expect(result["engine.type"]).toBe("claude");
+      expect(result["ralph.max-iterations"]).toBe("25");
     });
 
     test("ignores comments and empty lines", () => {
-      const content = `
+      const result = parseConfigFile(`
 # This is a comment
-ENGINE=opencode
+[engine]
+# type = opencode
+type = claude
 
-# Another comment
-MAX_ITERATIONS=10
-`;
-      const result = parseEnvFile(content);
-      expect(result.ENGINE).toBe("opencode");
-      expect(result.MAX_ITERATIONS).toBe("10");
-      expect(Object.keys(result).length).toBe(2);
+`);
+      expect(result["engine.type"]).toBe("claude");
+      expect(Object.keys(result).length).toBe(1);
     });
 
-    test("handles quoted values with double quotes", () => {
-      const content = `TEST_CMD="npm run test:ci"`;
-      const result = parseEnvFile(content);
-      expect(result.TEST_CMD).toBe("npm run test:ci");
+    test("handles double-quoted values", () => {
+      const result = parseConfigFile(`
+[ralph]
+test-cmd = "npm run test:ci"
+`);
+      expect(result["ralph.test-cmd"]).toBe("npm run test:ci");
     });
 
-    test("handles quoted values with single quotes", () => {
-      const content = `OC_PRIME_MODEL='claude-opus'`;
-      const result = parseEnvFile(content);
-      expect(result.OC_PRIME_MODEL).toBe("claude-opus");
+    test("handles single-quoted values", () => {
+      const result = parseConfigFile(`
+[ralph]
+test-cmd = 'bun test'
+`);
+      expect(result["ralph.test-cmd"]).toBe("bun test");
     });
 
     test("handles values with equals signs", () => {
-      const content = `SOME_VAR=value=with=equals`;
-      const result = parseEnvFile(content);
-      expect(result.SOME_VAR).toBe("value=with=equals");
+      const result = parseConfigFile(`
+[ralph]
+test-cmd = KEY=VAL bun test
+`);
+      expect(result["ralph.test-cmd"]).toBe("KEY=VAL bun test");
     });
 
-    test("handles empty values", () => {
-      const content = `EMPTY_VAR=`;
-      const result = parseEnvFile(content);
-      expect(result.EMPTY_VAR).toBe("");
+    test("handles keys without a section", () => {
+      const result = parseConfigFile(`
+standalone = value
+`);
+      expect(result["standalone"]).toBe("value");
     });
 
     test("trims whitespace around keys and values", () => {
-      const content = `  SPACED_KEY  =  spaced value  `;
-      const result = parseEnvFile(content);
-      expect(result.SPACED_KEY).toBe("spaced value");
+      const result = parseConfigFile(`
+[engine]
+  type  =  opencode
+`);
+      expect(result["engine.type"]).toBe("opencode");
+    });
+
+    test("parses all config sections", () => {
+      const result = parseConfigFile(`
+[engine]
+type = claude
+
+[models]
+claude = opus
+claude-effort = medium
+opencode-primary = gpt-5
+opencode-fallback = gpt-4
+
+[rate-limits]
+soft-retries = 7
+soft-wait = 60
+
+[ralph]
+max-iterations = 25
+sleep-seconds = 5
+skip-commit = true
+push-after-commit = true
+skip-test-verify = false
+max-consecutive-failures = 5
+test-cmd = bun test
+model = haiku
+effort = low
+audit-after-complete = true
+
+[willie]
+max-iterations = 3
+audit-prompt = audit/prompt.md
+model = opus
+effort = high
+
+[logging]
+log-dir = /tmp/logs
+progress-dir = /tmp/progress
+`);
+
+      expect(result["engine.type"]).toBe("claude");
+      expect(result["models.claude"]).toBe("opus");
+      expect(result["models.claude-effort"]).toBe("medium");
+      expect(result["models.opencode-primary"]).toBe("gpt-5");
+      expect(result["models.opencode-fallback"]).toBe("gpt-4");
+      expect(result["rate-limits.soft-retries"]).toBe("7");
+      expect(result["rate-limits.soft-wait"]).toBe("60");
+      expect(result["ralph.max-iterations"]).toBe("25");
+      expect(result["ralph.sleep-seconds"]).toBe("5");
+      expect(result["ralph.skip-commit"]).toBe("true");
+      expect(result["ralph.push-after-commit"]).toBe("true");
+      expect(result["ralph.skip-test-verify"]).toBe("false");
+      expect(result["ralph.max-consecutive-failures"]).toBe("5");
+      expect(result["ralph.test-cmd"]).toBe("bun test");
+      expect(result["ralph.model"]).toBe("haiku");
+      expect(result["ralph.effort"]).toBe("low");
+      expect(result["ralph.audit-after-complete"]).toBe("true");
+      expect(result["willie.max-iterations"]).toBe("3");
+      expect(result["willie.audit-prompt"]).toBe("audit/prompt.md");
+      expect(result["willie.model"]).toBe("opus");
+      expect(result["willie.effort"]).toBe("high");
+      expect(result["logging.log-dir"]).toBe("/tmp/logs");
+      expect(result["logging.progress-dir"]).toBe("/tmp/progress");
     });
   });
 
-  describe("applyEnvToConfig", () => {
-    test("applies engine setting", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { ENGINE: "claude" });
+  describe("applyConfigToConfig", () => {
+    test("applies engine type", () => {
+      const config = baseConfig();
+      applyConfigToConfig(config, { "engine.type": "claude" });
       expect(config.engine).toBe("claude");
     });
 
-    test("ignores invalid engine values", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { ENGINE: "invalid" });
-      expect(config.engine).toBe("opencode"); // default unchanged
-    });
-
-    test("applies numeric settings", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { MAX_ITERATIONS: "25", SLEEP_SECONDS: "5" });
-      expect(config.maxIterations).toBe(25);
-      expect(config.sleepSeconds).toBe(5);
-    });
-
-    test("applies boolean settings with 1/0", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { SKIP_COMMIT: "1", SKIP_TEST_VERIFY: "0" });
-      expect(config.skipCommit).toBe(true);
-      expect(config.skipTestVerify).toBe(false);
-    });
-
-    test("applies boolean settings with true/false", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { SKIP_COMMIT: "true", SKIP_TEST_VERIFY: "false" });
-      expect(config.skipCommit).toBe(true);
-      expect(config.skipTestVerify).toBe(false);
+    test("ignores invalid engine type", () => {
+      const config = baseConfig();
+      applyConfigToConfig(config, { "engine.type": "invalid" });
+      expect(config.engine).toBe("opencode");
     });
 
     test("applies model settings", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { 
-        CLAUDE_MODEL: "opus",
-        OC_PRIME_MODEL: "gpt-5",
-        OC_FALL_MODEL: "claude-sonnet"
+      const config = baseConfig();
+      applyConfigToConfig(config, {
+        "models.claude": "opus",
+        "models.claude-effort": "medium",
+        "models.opencode-primary": "gpt-5",
+        "models.opencode-fallback": "gpt-4",
       });
       expect(config.claudeModel).toBe("opus");
+      expect(config.claudeEffort).toBe("medium");
       expect(config.ocPrimeModel).toBe("gpt-5");
-      expect(config.ocFallModel).toBe("claude-sonnet");
+      expect(config.ocFallModel).toBe("gpt-4");
     });
 
-    test("applies test command", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { TEST_CMD: "bun test" });
+    test("ignores invalid effort level", () => {
+      const config = baseConfig();
+      applyConfigToConfig(config, { "models.claude-effort": "turbo" });
+      expect(config.claudeEffort).toBe("high"); // unchanged
+    });
+
+    test("applies rate limit settings", () => {
+      const config = baseConfig();
+      applyConfigToConfig(config, {
+        "rate-limits.soft-retries": "7",
+        "rate-limits.soft-wait": "60",
+      });
+      expect(config.softLimitRetries).toBe(7);
+      expect(config.softLimitWait).toBe(60);
+    });
+
+    test("applies ralph settings", () => {
+      const config = baseConfig();
+      applyConfigToConfig(config, {
+        "ralph.max-iterations": "25",
+        "ralph.sleep-seconds": "5",
+        "ralph.skip-commit": "true",
+        "ralph.push-after-commit": "true",
+        "ralph.skip-test-verify": "true",
+        "ralph.max-consecutive-failures": "5",
+        "ralph.test-cmd": "bun test",
+        "ralph.model": "haiku",
+        "ralph.effort": "low",
+        "ralph.audit-after-complete": "true",
+      });
+      expect(config.maxIterations).toBe(25);
+      expect(config.sleepSeconds).toBe(5);
+      expect(config.skipCommit).toBe(true);
+      expect(config.pushAfterCommit).toBe(true);
+      expect(config.skipTestVerify).toBe(true);
+      expect(config.maxConsecutiveFailures).toBe(5);
       expect(config.testCmd).toBe("bun test");
+      expect(config.ralphModel).toBe("haiku");
+      expect(config.ralphEffort).toBe("low");
+      expect(config.auditAfterComplete).toBe(true);
     });
 
-    test("ignores empty test command", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { TEST_CMD: "  " });
-      expect(config.testCmd).toBeUndefined();
-    });
-  });
-
-  describe("btca config", () => {
-    test("enables btca with BTCA_ENABLED=1", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { BTCA_ENABLED: "1" });
-      expect(config.btcaEnabled).toBe(true);
-    });
-
-    test("enables btca with BTCA_ENABLED=true", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { BTCA_ENABLED: "true" });
-      expect(config.btcaEnabled).toBe(true);
+    test("applies willie settings", () => {
+      const config = baseConfig();
+      applyConfigToConfig(config, {
+        "willie.max-iterations": "3",
+        "willie.audit-prompt": "audit/prompt.md",
+        "willie.model": "opus",
+        "willie.effort": "medium",
+      });
+      expect(config.willieMaxIterations).toBe(3);
+      expect(config.willieAuditPrompt).toBe("audit/prompt.md");
+      expect(config.willieModel).toBe("opus");
+      expect(config.willieEffort).toBe("medium");
     });
 
-    test("disables btca with BTCA_ENABLED=0", () => {
-      const config = getDefaultConfig();
-      config.btcaEnabled = true; // Start enabled
-      applyEnvToConfig(config, { BTCA_ENABLED: "0" });
-      expect(config.btcaEnabled).toBe(false);
+    test("applies logging settings", () => {
+      const config = baseConfig();
+      applyConfigToConfig(config, {
+        "logging.log-dir": "/tmp/logs",
+        "logging.progress-dir": "/tmp/progress",
+      });
+      expect(config.logDir).toBe("/tmp/logs");
+      expect(config.progressDir).toBe("/tmp/progress");
     });
 
-    test("parses comma-separated resources", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { BTCA_RESOURCES: "gin,sqlx,solana-go" });
-      expect(config.btcaResources).toEqual(["gin", "sqlx", "solana-go"]);
-    });
+    test("later apply overrides earlier values", () => {
+      const config = baseConfig();
 
-    test("trims whitespace in resources", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { BTCA_RESOURCES: " gin , sqlx , solana-go " });
-      expect(config.btcaResources).toEqual(["gin", "sqlx", "solana-go"]);
-    });
-
-    test("filters empty resources", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { BTCA_RESOURCES: "gin,,sqlx,," });
-      expect(config.btcaResources).toEqual(["gin", "sqlx"]);
-    });
-
-    test("handles empty resources string", () => {
-      const config = getDefaultConfig();
-      applyEnvToConfig(config, { BTCA_RESOURCES: "" });
-      expect(config.btcaResources).toEqual([]);
-    });
-  });
-
-  describe("config priority simulation", () => {
-    test("later config overrides earlier", () => {
-      const config = getDefaultConfig();
-      
       // Simulate global config
-      applyEnvToConfig(config, { MAX_ITERATIONS: "100", ENGINE: "claude" });
-      
-      // Simulate project config (overrides global)
-      applyEnvToConfig(config, { MAX_ITERATIONS: "5" });
-      
-      expect(config.maxIterations).toBe(5); // Project override
-      expect(config.engine).toBe("claude"); // From global (not overridden)
-    });
+      applyConfigToConfig(config, {
+        "engine.type": "opencode",
+        "ralph.max-iterations": "100",
+      });
 
-    test("env vars override all", () => {
-      const config = getDefaultConfig();
-      
-      // Simulate global config
-      applyEnvToConfig(config, { MAX_ITERATIONS: "100" });
-      
-      // Simulate project config
-      applyEnvToConfig(config, { MAX_ITERATIONS: "50" });
-      
-      // Simulate env vars (should win)
-      applyEnvToConfig(config, { MAX_ITERATIONS: "3" });
-      
+      // Simulate project config override
+      applyConfigToConfig(config, {
+        "engine.type": "claude",
+        "ralph.max-iterations": "3",
+      });
+
+      expect(config.engine).toBe("claude");
       expect(config.maxIterations).toBe(3);
     });
+
+    test("ignores empty test-cmd", () => {
+      const config = baseConfig();
+      applyConfigToConfig(config, { "ralph.test-cmd": "  " });
+      expect(config.testCmd).toBeUndefined();
+    });
+
+    test("ignores empty opencode-fallback", () => {
+      const config = baseConfig();
+      applyConfigToConfig(config, { "models.opencode-fallback": "  " });
+      expect(config.ocFallModel).toBeUndefined();
+    });
   });
 
-  describe("defaults", () => {
-    test("provides sensible defaults", () => {
-      const config = getDefaultConfig();
-      
-      expect(config.engine).toBe("opencode");
-      expect(config.maxIterations).toBe(10);
-      expect(config.sleepSeconds).toBe(2);
-      expect(config.skipCommit).toBe(false);
-      expect(config.claudeModel).toBe("sonnet");
-      expect(config.ocPrimeModel).toBe("big-pickle");
-      expect(config.ocFallModel).toBeUndefined();
-      expect(config.testCmd).toBeUndefined();
-      expect(config.skipTestVerify).toBe(false);
-      expect(config.btcaEnabled).toBe(false);
-      expect(config.btcaResources).toEqual([]);
+  describe("model helpers", () => {
+    test("getCurrentModel returns claude model when engine is claude", () => {
+      expect(getCurrentModel(baseConfig({ engine: "claude", claudeModel: "opus" }))).toBe("opus");
+    });
+
+    test("getCurrentModel returns opencode model when engine is opencode", () => {
+      expect(getCurrentModel(baseConfig({ engine: "opencode", ocPrimeModel: "gpt-5" }))).toBe("gpt-5");
+    });
+
+    test("getRalphModel uses per-agent override for claude", () => {
+      expect(getRalphModel(baseConfig({ engine: "claude", claudeModel: "sonnet", ralphModel: "opus" }))).toBe("opus");
+    });
+
+    test("getRalphModel falls back to global claude model", () => {
+      expect(getRalphModel(baseConfig({ engine: "claude", claudeModel: "sonnet" }))).toBe("sonnet");
+    });
+
+    test("getRalphModel returns opencode model regardless of ralphModel", () => {
+      expect(getRalphModel(baseConfig({ engine: "opencode", ocPrimeModel: "gpt-5", ralphModel: "opus" }))).toBe("gpt-5");
+    });
+
+    test("getRalphEffort uses per-agent override", () => {
+      expect(getRalphEffort(baseConfig({ claudeEffort: "high", ralphEffort: "low" }))).toBe("low");
+    });
+
+    test("getRalphEffort falls back to global effort", () => {
+      expect(getRalphEffort(baseConfig({ claudeEffort: "medium" }))).toBe("medium");
+    });
+
+    test("getWillieModel uses per-agent override", () => {
+      expect(getWillieModel(baseConfig({ willieModel: "sonnet" }))).toBe("sonnet");
+    });
+
+    test("getWillieModel defaults to opus", () => {
+      expect(getWillieModel(baseConfig())).toBe("opus");
+    });
+
+    test("getWillieEffort uses per-agent override", () => {
+      expect(getWillieEffort(baseConfig({ willieEffort: "low" }))).toBe("low");
+    });
+
+    test("getWillieEffort falls back to global effort", () => {
+      expect(getWillieEffort(baseConfig({ claudeEffort: "medium" }))).toBe("medium");
     });
   });
 });

@@ -75,7 +75,7 @@ describe("ClaudeEngine", () => {
       
       expect(spy).toHaveBeenCalledWith(
         "claude",
-        ["--model", "sonnet", "--dangerously-skip-permissions", "-p", "test prompt"],
+        ["--model", "sonnet", "--effort", "high", "--dangerously-skip-permissions", "-p", "test prompt"],
         expect.objectContaining({
           encoding: "utf-8",
           maxBuffer: 50 * 1024 * 1024,

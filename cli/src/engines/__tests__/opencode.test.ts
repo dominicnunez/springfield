@@ -91,12 +91,18 @@ describe("OpenCodeEngine", () => {
   describe("rate limit detection", () => {
     // Test via run() output since isRateLimited is private
     const rateLimitPatterns = [
+      // Soft rate limit patterns
       "Error: rate limit exceeded",
-      "Error: quota exceeded",
-      "HTTP 429: Too many requests",
-      "API quota exhausted",
-      "Server overloaded",
-      "At capacity, please try again",
+      "statusCode 429 returned",
+      "Too many requests, slow down",
+      "tokens per minute limit reached",
+      "at capacity, please wait",
+      "retry after 30 seconds",
+      // Hard rate limit patterns
+      "insufficient_quota for this request",
+      "insufficient balance on account",
+      "exceeded current quota for usage tier",
+      "please update billing details",
     ];
 
     for (const pattern of rateLimitPatterns) {
@@ -118,6 +124,44 @@ describe("OpenCodeEngine", () => {
         spy.mockRestore();
       });
     }
+
+    test("classifies hard rate limits correctly", async () => {
+      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
+        status: 1,
+        stdout: "insufficient_quota for this request",
+        stderr: "",
+        pid: 1,
+        output: [],
+        signal: null,
+      });
+
+      const engine = new OpenCodeEngine();
+      const result = await engine.run("test prompt");
+
+      expect(result.hardRateLimited).toBe(true);
+      expect(result.softRateLimited).toBe(false);
+
+      spy.mockRestore();
+    });
+
+    test("classifies soft rate limits correctly", async () => {
+      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
+        status: 1,
+        stdout: "Error: rate limit exceeded",
+        stderr: "",
+        pid: 1,
+        output: [],
+        signal: null,
+      });
+
+      const engine = new OpenCodeEngine();
+      const result = await engine.run("test prompt");
+
+      expect(result.softRateLimited).toBe(true);
+      expect(result.hardRateLimited).toBe(false);
+
+      spy.mockRestore();
+    });
 
     test("does not detect rate limit for normal errors", async () => {
       const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
