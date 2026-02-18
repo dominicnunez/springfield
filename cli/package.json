@@ -42,11 +42,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dominicnunez/ralph.git"
+    "url": "git+https://github.com/dominicnunez/springfield.git"
   },
-  "homepage": "https://github.com/dominicnunez/ralph#readme",
+  "homepage": "https://github.com/dominicnunez/springfield#readme",
   "bugs": {
-    "url": "https://github.com/dominicnunez/ralph/issues"
+    "url": "https://github.com/dominicnunez/springfield/issues"
   },
   "dependencies": {
     "commander": "^13.0.0",

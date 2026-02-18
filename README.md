@@ -6,8 +6,6 @@ An autonomous AI coding agent runner that orchestrates iterative development wor
 
 ## Install
 
-**Option A: npm** (recommended)
-
 ```bash
 npm install -g sfk
 
@@ -16,17 +14,6 @@ sfk                        # Uses PRD.md with OpenCode (default)
 sfk --claude               # Use Claude Code
 sfk --model sonnet         # Override model
 ```
-
-**Option B: Clone + Bash**
-
-```bash
-git clone https://github.com/dominicnunez/ralph.git
-cd ralph && chmod +x ralph.sh
-
-./ralph.sh                 # Uses ralph.env for configuration
-```
-
-Both versions have identical features.
 
 ## Overview
 
@@ -52,11 +39,7 @@ Ralph runs an AI coding assistant in a loop, feeding it tasks from a PRD (Produc
 
 2. Run Ralph:
    ```bash
-   # Using npm CLI
    sfk
-
-   # Using bash script
-   ./ralph.sh
    ```
 
 Ralph will work through each task, running tests and committing progress automatically.
@@ -226,25 +209,9 @@ If a rate limit is detected and `opencode-fallback` is configured, Ralph automat
 | 0 | All tasks completed successfully |
 | 1 | Max iterations reached or error occurred |
 
-## PRD Archiving
-
-When all tasks complete successfully, Ralph automatically archives the PRD:
-
-- Creates `completed-prds/` directory if it doesn't exist
-- Moves `PRD.md` to `completed-prds/YYYYMMDD-HHMMSS-title.md`
-- Title is extracted from the first `# heading` in the PRD
-
-This keeps your workspace clean and maintains a history of completed work.
-
 ## Requirements
 
-**npm version (`sfk`):**
 - Node.js 18+ or Bun
-
-**Bash version (`ralph.sh`):**
-- Bash
-
-**Both versions:**
 - [OpenCode CLI](https://opencode.ai) (`opencode` command) - for OpenCode engine
 - [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude` command) - for Claude engine
 
@@ -252,8 +219,8 @@ This keeps your workspace clean and maintains a history of completed work.
 
 ```bash
 # Clone and install
-git clone https://github.com/dominicnunez/ralph.git
-cd ralph/cli
+git clone https://github.com/dominicnunez/springfield.git
+cd springfield/cli
 npm install
 
 # Run in dev mode
@@ -267,40 +234,43 @@ bun run build:all
 
 Willie is Ralph's counterpart: Ralph builds, Willie audits. It runs a continuous loop of audit → validate → fix until the codebase is clean.
 
-### Setup
-
-1. Copy `willie.sh` to your project root
-2. Create `audit-prompt.md` with your audit instructions
-3. Run Willie
-
 ### Usage
 
 ```bash
-./willie.sh             # full loop, unlimited
-./willie.sh 3           # full loop, 3 iterations
-./willie.sh audit       # start from audit, loop
-./willie.sh validate    # start from validate, loop
-./willie.sh fix         # start from fix, loop
+sfk audit                    # full loop, uses built-in audit prompt
+sfk audit --max-iterations 3 # limit to 3 iterations
+sfk audit --start validate   # start from validate step
+sfk audit --start fix        # start from fix step
 ```
+
+### Audit Prompt Resolution
+
+Willie resolves the audit prompt in this order:
+
+1. `--audit-prompt <path>` CLI flag
+2. `audit/prompt.md` in the project root
+3. `~/.config/sfk/audit-prompt.md` (global)
+4. Built-in default prompt (security, bugs, performance, code quality)
 
 ### How It Works
 
 Each iteration runs three steps:
 
-1. **Audit** — Opus scans the codebase using your `audit-prompt.md`, writes findings to `audit-report.md`
-2. **Validate** — Opus reads the actual code at each finding, moves false positives to `known-exceptions.md`
+1. **Audit** — Opus scans the codebase using the audit prompt, writes findings to `audit/report.md`
+2. **Validate** — Opus reads the actual code at each finding, moves false positives to `audit/exceptions.md`
 3. **Fix** — Opus applies proper long-term fixes, commits each one, deletes the report when done
 
 The loop exits when an audit produces zero findings.
 
 ### Files
 
+All audit artifacts live in the `audit/` directory:
+
 | File | Description |
 |------|-------------|
-| `audit-prompt.md` | Your audit instructions (required, gitignored) |
-| `audit-report.md` | Generated findings (gitignored) |
-| `known-exceptions.md` | Documented intentional tradeoffs and false positives |
-| `.audit-logs/` | Per-step logs for each iteration (gitignored) |
+| `audit/prompt.md` | Custom audit instructions (optional) |
+| `audit/report.md` | Generated findings |
+| `audit/exceptions.md` | Documented intentional tradeoffs and false positives |
 
 ## Legacy Config Migration
 
