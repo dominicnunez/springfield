@@ -1,6 +1,6 @@
 {
   "name": "sfk",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Springfield Kit — Autonomous AI coding agent with enforced test verification",
   "type": "module",
   "main": "dist/index.js",
@@ -26,7 +26,7 @@
     "lint": "biome check src/",
     "lint:fix": "biome check --write --unsafe src/",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "bun run build:all"
+    "prepublishOnly": "bun run typecheck && bun run lint && bun test && bun run build:all"
   },
   "keywords": [
     "ai",
