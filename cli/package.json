@@ -1,11 +1,11 @@
 {
-  "name": "sfs-ai",
+  "name": "sfk",
   "version": "1.0.0",
-  "description": "Ship First, Ship Fast — Autonomous AI coding agent with enforced test verification",
+  "description": "Springfield Kit — Autonomous AI coding agent with enforced test verification",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "sfs": "./bin.js"
+    "sfk": "./bin.js"
   },
   "files": [
     "dist",
@@ -16,12 +16,12 @@
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
     "dev": "bun run src/index.ts",
-    "build": "bun build src/index.ts --compile --minify --target=bun-darwin-arm64 --outfile dist/sfs-darwin-arm64",
-    "build:darwin-arm64": "bun build src/index.ts --compile --minify --target=bun-darwin-arm64 --outfile dist/sfs-darwin-arm64",
-    "build:darwin-x64": "bun build src/index.ts --compile --minify --target=bun-darwin-x64 --outfile dist/sfs-darwin-x64",
-    "build:linux-x64": "bun build src/index.ts --compile --minify --target=bun-linux-x64 --outfile dist/sfs-linux-x64",
-    "build:linux-arm64": "bun build src/index.ts --compile --minify --target=bun-linux-arm64 --outfile dist/sfs-linux-arm64",
-    "build:windows-x64": "bun build src/index.ts --compile --minify --target=bun-windows-x64 --outfile dist/sfs-windows-x64.exe",
+    "build": "bun build src/index.ts --compile --minify --target=bun-darwin-arm64 --outfile dist/sfk-darwin-arm64",
+    "build:darwin-arm64": "bun build src/index.ts --compile --minify --target=bun-darwin-arm64 --outfile dist/sfk-darwin-arm64",
+    "build:darwin-x64": "bun build src/index.ts --compile --minify --target=bun-darwin-x64 --outfile dist/sfk-darwin-x64",
+    "build:linux-x64": "bun build src/index.ts --compile --minify --target=bun-linux-x64 --outfile dist/sfk-linux-x64",
+    "build:linux-arm64": "bun build src/index.ts --compile --minify --target=bun-linux-arm64 --outfile dist/sfk-linux-arm64",
+    "build:windows-x64": "bun build src/index.ts --compile --minify --target=bun-windows-x64 --outfile dist/sfk-windows-x64.exe",
     "build:all": "bun run build:darwin-arm64 && bun run build:darwin-x64 && bun run build:linux-x64 && bun run build:linux-arm64 && bun run build:windows-x64",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "bun run build:all"

@@ -33,7 +33,7 @@ function getPlatformBinary() {
   }
 
   const ext = platform === "win32" ? ".exe" : "";
-  const binaryName = `sfs-${platformKey}-${archKey}${ext}`;
+  const binaryName = `sfk-${platformKey}-${archKey}${ext}`;
 
   return join(__dirname, "dist", binaryName);
 }
