@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import * as childProcess from "node:child_process";
-import { createRequire } from "node:module";
 import { EventEmitter } from "node:events";
+import { createRequire } from "node:module";
 import { Readable } from "node:stream";
 import { ClaudeEngine } from "../claude.js";
 
 // The engine uses require("node:child_process") inside isAvailable(), so we need
 // the CJS module reference (same cached object) for spies to take effect there.
-const cjsChildProcess = createRequire(import.meta.url)("node:child_process") as typeof childProcess;
+const cjsChildProcess = createRequire(import.meta.url)(
+  "node:child_process",
+) as typeof childProcess;
 
 // ──────────────────────────────────────────────────────────────
 // Helpers
