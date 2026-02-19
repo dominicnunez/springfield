@@ -304,8 +304,9 @@ export async function auditLoop(
         ),
       );
       notify(
-        `Willie completed ${options.maxIterations} iteration(s) on ${projectName}.`,
+        `Willie: reached iteration cap (${options.maxIterations}) on ${projectName}. NOT converged — issues may remain.`,
       );
+      process.exitCode = 3;
       break;
     }
 
