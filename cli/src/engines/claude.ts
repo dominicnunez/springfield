@@ -43,6 +43,7 @@ export class ClaudeEngine implements Engine {
       });
 
       let output = "";
+      // biome-ignore lint/suspicious/noExplicitAny: Claude stream events have varying shapes
       let resultEvent: any = null;
       let lastAssistantText = "";
       let killed = false;
@@ -61,6 +62,7 @@ export class ClaudeEngine implements Engine {
       };
 
       // Parse streaming JSON lines from stdout
+      // biome-ignore lint/style/noNonNullAssertion: stdout is guaranteed by stdio config
       const rl = createInterface({ input: child.stdout! });
 
       rl.on("line", (line) => {
@@ -101,8 +103,8 @@ export class ClaudeEngine implements Engine {
           }
         } catch {
           // Non-JSON line, append to output
-          output += line + "\n";
-          process.stdout.write(line + "\n");
+          output += `${line}\n`;
+          process.stdout.write(`${line}\n`);
         }
       });
 
@@ -144,14 +146,17 @@ export class ClaudeEngine implements Engine {
       });
 
       // Safety timeout: 45 minutes max per step
-      const safetyTimeout = setTimeout(() => {
-        if (!resultEvent) {
-          process.stderr.write(
-            "\n[sfk] Safety timeout reached (45 min), killing Claude process\n"
-          );
-          killChild();
-        }
-      }, 45 * 60 * 1000);
+      const safetyTimeout = setTimeout(
+        () => {
+          if (!resultEvent) {
+            process.stderr.write(
+              "\n[sfk] Safety timeout reached (45 min), killing Claude process\n",
+            );
+            killChild();
+          }
+        },
+        45 * 60 * 1000,
+      );
 
       child.on("close", () => {
         clearTimeout(safetyTimeout);

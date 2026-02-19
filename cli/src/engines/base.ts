@@ -48,7 +48,6 @@ Rules:
 - Do NOT add Co-Authored-By or AI attribution
 - Do NOT reference audit report IDs, finding numbers, or internal file paths`;
 
-
 export interface PromptOptions {
   skipCommit: boolean;
   progressFile: string;
