@@ -321,7 +321,18 @@ Rules:
 2. Determine if the finding is FACTUALLY WRONG (false positive) or REAL
 3. A finding is a false positive ONLY if the audit misread the code, missed existing handling, or described behavior that doesn't actually occur
 4. A finding that is real but "minor" or "easy to fix" is NOT a false positive — keep it in the report
-5. Move only genuine false positives to the "False Positives" section of audit/exceptions.md with a **Date** field (YYYY-MM-DD) and brief reasoning. Do NOT include audit report IDs, finding numbers, or category labels (e.g. "Audit V3 ARCH-04") in exception entries — describe the issue in plain language
+5. Move only genuine false positives to the "False Positives" section of audit/exceptions.md using this exact format:
+
+\`\`\`
+### Plain language description of the finding
+
+**Location:** \`file/path:line\` — optional context
+**Date:** YYYY-MM-DD
+
+**Reason:** Why this is a false positive. Can be multiple lines.
+\`\`\`
+
+   Do NOT include audit report IDs, finding numbers, or category labels — plain language only
 6. Remove invalidated items from audit/report.md
 7. If ALL items are invalidated, delete audit/report.md entirely
 8. Do not reference finding IDs or category labels in commit messages`;
@@ -335,11 +346,22 @@ Rules:
    - The finding requires architectural changes disproportionate to its severity, OR
    - There is a genuine design tradeoff where the current approach is defensible, OR
    - The finding is about external constraints you cannot change (transitive deps, upstream bugs)
-4. When adding to exceptions, categorize correctly and always include a **Date** field (YYYY-MM-DD):
+4. When adding to exceptions, use the correct section and this exact format:
+
+\`\`\`
+### Plain language description of the finding
+
+**Location:** \`file/path:line\` — optional context
+**Date:** YYYY-MM-DD
+
+**Reason:** Why this is excepted. Can be multiple lines.
+\`\`\`
+
+   Sections:
    - "False Positives" — finding was factually wrong (should have been caught in validate step)
-   - "Won't Fix" — finding is real but genuinely not worth fixing, with specific reasoning
+   - "Won't Fix" — finding is real but genuinely not worth fixing
    - "Intentional Design Decisions" — finding describes behavior that is correct by design
-   Do NOT include audit report IDs, finding numbers, or category labels (e.g. "Audit V3 ARCH-04") — describe the issue in plain language
+   Do NOT include audit report IDs, finding numbers, or category labels — plain language only
 5. Commit each fix following the commit standard below.
 6. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
 7. Delete audit/report.md when 100% resolved and push

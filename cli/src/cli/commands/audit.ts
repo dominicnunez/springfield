@@ -46,14 +46,24 @@ const EXCEPTIONS_TEMPLATE = `# Audit Exceptions
 
 > Items validated as false positives or accepted as won't-fix.
 > Managed by willie audit loop. Do not edit format manually.
+>
+> Entry format:
+> ### Plain language description
+> **Location:** \`file/path:line\` — optional context
+> **Date:** YYYY-MM-DD
+> **Reason:** Explanation (can be multiple lines)
 
 ## False Positives
 
-<!-- Items the auditor flagged but are not actual issues -->
+<!-- Findings where the audit misread the code or described behavior that doesn't occur -->
 
 ## Won't Fix
 
-<!-- Items that are real but intentionally left as-is -->
+<!-- Real findings not worth fixing — architectural cost, external constraints, etc. -->
+
+## Intentional Design Decisions
+
+<!-- Findings that describe behavior which is correct by design -->
 `;
 
 // ─────────────────────────────────────────────────────────────
