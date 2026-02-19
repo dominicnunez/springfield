@@ -264,9 +264,10 @@ export const DEFAULT_AUDIT_PROMPT = `Audit this codebase for security vulnerabil
 
 Rules:
 1. Read the project structure and key source files thoroughly
-2. Check for: injection flaws, auth issues, data exposure, misconfigurations, error handling gaps, race conditions, resource leaks, and logic errors
+2. Check for: injection flaws, auth issues, data exposure, misconfigurations, error handling gaps, race conditions, resource leaks, logic errors, misleading comments, dead code/config, magic numbers that should be named constants, and missing error context at package boundaries
 3. Check audit/exceptions.md — do not re-flag items already listed there
-4. Write findings to audit/report.md using this format for each finding:
+4. Include ALL real findings regardless of fix difficulty — small fixes (wrong comments, dead config, missing constants) are valid findings. The fix step decides effort, not the audit step.
+5. Write findings to audit/report.md using this format for each finding:
 
 ### [Category] Brief description
 - **Severity**: Critical / High / Medium / Low
@@ -276,24 +277,33 @@ Rules:
 
 Categories: Security, Bug, Performance, Code Quality, Error Handling, Configuration
 
-5. If no issues found, do not create audit/report.md`;
+6. If no issues found, do not create audit/report.md`;
 
 export const VALIDATE_PROMPT = `Review and validate or invalidate each item in audit/report.md. Be thorough — actually read the code at every referenced file:line. Do not just trust the audit description.
 
 Rules:
 1. Read the actual code at the referenced file:line
-2. Determine if the issue is real (valid) or a false positive (invalidate)
-3. Move any false positives to audit/exceptions.md with a "date added" field and brief reasoning
-4. Remove invalidated items from audit/report.md
-5. If ALL items are invalidated, delete audit/report.md entirely
-6. Do not reference finding IDs or category labels in commit messages`;
+2. Determine if the finding is FACTUALLY WRONG (false positive) or REAL
+3. A finding is a false positive ONLY if the audit misread the code, missed existing handling, or described behavior that doesn't actually occur
+4. A finding that is real but "minor" or "easy to fix" is NOT a false positive — keep it in the report
+5. Move only genuine false positives to the "False Positives" section of audit/exceptions.md with a date and brief reasoning
+6. Remove invalidated items from audit/report.md
+7. If ALL items are invalidated, delete audit/report.md entirely
+8. Do not reference finding IDs or category labels in commit messages`;
 
 export const FIX_PROMPT = `Fix the issues in audit/report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to audit/exceptions.md.
 
 Rules:
 1. Do proper long-term fixes, not quick-fix bandaids
-2. Anything worth fixing later is valid and should be done now
-3. Anything truly acceptable/wont-fix: add to audit/exceptions.md with date added and reasoning
-4. Semantically commit each fix with a descriptive message (push-after-commit is enabled)
-5. Write commit messages as a developer would — describe what you fixed and why. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
-6. Delete audit/report.md when 100% resolved and push`;
+2. **Fix-effort rule:** If a finding can be fixed in the current session (wrong comments, missing constants, dead config, incomplete test coverage, trivial code cleanup), FIX IT. Do not punt easy fixes to exceptions.
+3. Only move items to the "Won't Fix" section of audit/exceptions.md when ALL of these are true:
+   - The finding requires architectural changes disproportionate to its severity, OR
+   - There is a genuine design tradeoff where the current approach is defensible, OR
+   - The finding is about external constraints you cannot change (transitive deps, upstream bugs)
+4. When adding to exceptions, categorize correctly:
+   - "False Positives" — finding was factually wrong (should have been caught in validate step)
+   - "Won't Fix" — finding is real but genuinely not worth fixing, with specific reasoning
+   - "Intentional Design Decisions" — finding describes behavior that is correct by design
+5. Semantically commit each fix with a descriptive message (push-after-commit is enabled)
+6. Write commit messages as a developer would — describe what you fixed and why. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
+7. Delete audit/report.md when 100% resolved and push`;
