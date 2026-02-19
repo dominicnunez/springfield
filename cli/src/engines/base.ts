@@ -20,6 +20,35 @@ export interface Engine {
 
 export const COMPLETE_MARKER = "<promise>COMPLETE</promise>";
 
+const COMMIT_STANDARD = `## Commit Message Standard
+
+Use conventional commits. Lowercase type, imperative mood, concise subject line.
+
+Format:
+\`\`\`
+<type>: <subject>
+
+[optional body — explain WHY, not what]
+\`\`\`
+
+Types:
+- **feat:** new feature or capability
+- **fix:** bug fix
+- **refactor:** code change that neither fixes a bug nor adds a feature
+- **test:** adding or updating tests
+- **docs:** documentation only
+- **chore:** maintenance, config, tooling
+- **perf:** performance improvement
+- **security:** security fix or hardening
+
+Rules:
+- Subject line: lowercase, imperative mood, no period, max ~72 chars
+- Add a body (separated by blank line) when the "why" isn't obvious from the subject
+- One concern per commit — two things = two commits
+- Do NOT add Co-Authored-By or AI attribution
+- Do NOT reference audit report IDs, finding numbers, or internal file paths`;
+
+
 export interface PromptOptions {
   skipCommit: boolean;
   progressFile: string;
@@ -53,7 +82,7 @@ export function generatePrompt(options: PromptOptions): string {
   - Append what worked to ${progressFile}`
     : `- If tests PASS:
   - Update PRD.md to mark the task complete (change [ ] to [x])
-  - Commit your changes with message: feat: [task description] (do NOT add Co-Authored-By)
+  - Commit your changes following the commit standard below
   - Append what worked to ${progressFile}`;
 
   return `You are Ralph, an autonomous coding agent. Do exactly ONE task per iteration.
@@ -107,6 +136,8 @@ If you discover a reusable pattern that future work should know about:
 - Add patterns like: 'This codebase uses X for Y' or 'Always do Z when changing W'
 - Only add genuinely reusable knowledge, not task-specific details
 
+${COMMIT_STANDARD}
+
 ## End Condition
 
 After completing your task, check PRD.md:
@@ -126,7 +157,7 @@ export function generateSingleTaskPrompt(
   - Append what worked to ${progressFile}`
     : `- If tests PASS:
   - Do NOT update PRD.md (single-task mode)
-  - Commit your changes with message: feat: [task description] (do NOT add Co-Authored-By)
+  - Commit your changes following the commit standard below
   - Append what worked to ${progressFile}`;
 
   return `You are Ralph, an autonomous coding agent. Do exactly ONE task per iteration.
@@ -189,6 +220,8 @@ If you discover a reusable pattern that future work should know about:
 - Add patterns like: 'This codebase uses X for Y' or 'Always do Z when changing W'
 - Only add genuinely reusable knowledge, not task-specific details
 
+${COMMIT_STANDARD}
+
 ## End Condition
 
 After completing your task, output exactly: ${COMPLETE_MARKER}`;
@@ -207,7 +240,7 @@ export function generateFixTestsPrompt(options: FixTestsPromptOptions): string {
   - Append what worked to ${progressFile}`
     : `- If tests PASS:
   - Update PRD.md to mark the task complete (change [ ] to [x])
-  - Commit your changes with message: feat: [task description] (do NOT add Co-Authored-By)
+  - Commit your changes following the commit standard below
   - Append what worked to ${progressFile}`;
 
   return `You are Ralph, an autonomous coding agent. Your ONLY task is to FIX THE FAILING TESTS.
@@ -248,6 +281,8 @@ ${commitInstructions}
 - Fix applied: [what you changed]
 - Test results: PASS/FAIL
 ---
+
+${COMMIT_STANDARD}
 
 ## End Condition
 
@@ -304,6 +339,6 @@ Rules:
    - "False Positives" — finding was factually wrong (should have been caught in validate step)
    - "Won't Fix" — finding is real but genuinely not worth fixing, with specific reasoning
    - "Intentional Design Decisions" — finding describes behavior that is correct by design
-5. Semantically commit each fix with a descriptive message (push-after-commit is enabled)
-6. Write commit messages as a developer would — describe what you fixed and why. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
+5. Commit each fix following conventional commit format (see below). Use \`fix:\` for bugs, \`security:\` for security issues, \`refactor:\` for code quality, \`chore:\` for config/docs cleanup. Add a body when the "why" isn't obvious.
+6. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
 7. Delete audit/report.md when 100% resolved and push`;
