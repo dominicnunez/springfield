@@ -339,6 +339,8 @@ Rules:
    - "False Positives" — finding was factually wrong (should have been caught in validate step)
    - "Won't Fix" — finding is real but genuinely not worth fixing, with specific reasoning
    - "Intentional Design Decisions" — finding describes behavior that is correct by design
-5. Commit each fix following conventional commit format (see below). Use \`fix:\` for bugs, \`security:\` for security issues, \`refactor:\` for code quality, \`chore:\` for config/docs cleanup. Add a body when the "why" isn't obvious.
+5. Commit each fix following the commit standard below.
 6. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
-7. Delete audit/report.md when 100% resolved and push`;
+7. Delete audit/report.md when 100% resolved and push
+
+${COMMIT_STANDARD}`;
