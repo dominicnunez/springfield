@@ -116,20 +116,29 @@ EOF
 
 ### Per-Agent Model/Effort
 
-Each agent can override the global model and effort level:
+Each agent inherits the engine's primary model by default. Override per-agent if needed:
 
 ```ini
+[engine]
+type = opencode
+
 [models]
-claude = sonnet           # global default
-claude-effort = high      # global default effort
+opencode-primary = opencode/glm-5-free  # global default
 
 [ralph]
-model = sonnet            # ralph uses sonnet
+# inherits opencode/glm-5-free by default
 effort = high
 
 [willie]
-model = opus              # willie uses opus
+# inherits opencode/glm-5-free by default
 effort = high
+```
+
+Or override the model for a specific agent:
+
+```ini
+[willie]
+model = opus              # willie uses opus instead
 ```
 
 ### Available Settings

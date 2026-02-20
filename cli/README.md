@@ -55,7 +55,7 @@ type = opencode
 [models]
 claude = sonnet
 claude-effort = high
-opencode-primary = big-pickle
+opencode-primary = opencode/glm-5-free
 
 [ralph]
 max-iterations = -1

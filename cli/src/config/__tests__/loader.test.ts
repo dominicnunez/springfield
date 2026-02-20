@@ -360,8 +360,14 @@ progress-dir = /tmp/progress
       );
     });
 
-    test("getWillieModel defaults to opus", () => {
-      expect(getWillieModel(baseConfig())).toBe("opus");
+    test("getWillieModel defaults to engine's primary model (opencode)", () => {
+      expect(getWillieModel(baseConfig())).toBe("big-pickle");
+    });
+
+    test("getWillieModel defaults to engine's primary model (claude)", () => {
+      expect(
+        getWillieModel(baseConfig({ engine: "claude", claudeModel: "sonnet" })),
+      ).toBe("sonnet");
     });
 
     test("getWillieEffort uses per-agent override", () => {

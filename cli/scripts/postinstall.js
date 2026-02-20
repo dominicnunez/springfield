@@ -21,7 +21,7 @@ type = opencode
 [models]
 claude = sonnet
 claude-effort = high
-opencode-primary = big-pickle
+opencode-primary = opencode/glm-5-free
 # opencode-fallback =
 
 [rate-limits]
@@ -42,7 +42,6 @@ max-consecutive-failures = 3
 [willie]
 max-iterations = 0
 # audit-prompt = audit-prompt.md
-# model = opus
 # effort = high
 
 [logging]

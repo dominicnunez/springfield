@@ -64,7 +64,7 @@ type = opencode
 [models]
 claude = sonnet
 claude-effort = high
-opencode-primary = big-pickle
+opencode-primary = opencode/glm-5-free
 # opencode-fallback =
 
 [rate-limits]
@@ -85,7 +85,6 @@ max-consecutive-failures = 3
 [willie]
 max-iterations = 0
 # audit-prompt = audit/prompt.md
-# model = opus
 # effort = high
 
 [logging]
@@ -463,10 +462,11 @@ export function getRalphEffort(config: Config): EffortLevel {
 }
 
 /**
- * Get the effective model for willie (defaults to opus)
+ * Get the effective model for willie (defaults to engine's primary model)
  */
 export function getWillieModel(config: Config): string {
-  return config.willieModel ?? "opus";
+  if (config.willieModel) return config.willieModel;
+  return config.engine === "claude" ? config.claudeModel : config.ocPrimeModel;
 }
 
 /**
