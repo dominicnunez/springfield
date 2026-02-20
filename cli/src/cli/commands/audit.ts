@@ -19,6 +19,7 @@ import {
   VALIDATE_PROMPT,
 } from "../../engines/base.js";
 import { ClaudeEngine } from "../../engines/claude.js";
+import { OpenCodeEngine } from "../../engines/opencode.js";
 import { logError, logInfo, logSuccess, logWarning } from "../../ui/logger.js";
 
 // ─────────────────────────────────────────────────────────────
@@ -260,13 +261,21 @@ export async function auditLoop(
     mkdirSync(logDir, { recursive: true });
   }
 
-  // Willie always uses Claude opus (or per-agent override)
   const model = getWillieModel(config);
   const effort = getWillieEffort(config);
-  const engine: Engine = new ClaudeEngine(model, effort);
+
+  let engine: Engine;
+  if (config.engine === "opencode") {
+    engine = new OpenCodeEngine(model, config.ocFallModel);
+  } else {
+    engine = new ClaudeEngine(model, effort);
+  }
 
   if (!engine.isAvailable()) {
-    logError("'claude' command not found. Willie requires Claude CLI.");
+    const engineName = config.engine === "opencode" ? "opencode" : "claude";
+    logError(
+      `'${engineName}' command not found. Willie requires ${engineName} CLI.`,
+    );
     process.exitCode = 1;
     return;
   }
