@@ -45,7 +45,11 @@ function commandExists(name) {
   try {
     const cmd = isWindows ? "where" : "which";
     const result = spawnSync(cmd, [name], { stdio: "pipe" });
-    return result.status === 0;
+    if (result.status !== 0) {
+      console.error(`Command not found: ${name}`);
+      return false;
+    }
+    return true;
   } catch {
     return false;
   }
@@ -85,8 +89,11 @@ function main() {
           });
         }
 
-        if (result.error === undefined) {
+        if (!result.error) {
           process.exit(result.status ?? 1);
+        } else {
+          console.error(`Failed to run ${runner}: ${result.error.message}`);
+          process.exit(1);
         }
       }
     }

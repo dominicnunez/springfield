@@ -32,6 +32,7 @@ import { detectTestCommand, verify } from "../../tasks/verification.js";
 import {
   initLogger,
   logAiOutput,
+  logDebug,
   logError,
   logInfo,
   logIteration,
@@ -89,8 +90,8 @@ function notify(message: string): void {
         stdio: "ignore",
       });
     }
-  } catch {
-    // openclaw not available, ignore
+  } catch (err) {
+    logDebug(`Notification failed: ${err}`);
   }
 }
 
@@ -132,11 +133,15 @@ function pushAfterCommit(headBefore: string): void {
   }
 }
 
-function getHeadSha(): string {
-  return spawnSync("git", ["rev-parse", "HEAD"], {
+function getHeadSha(): string | null {
+  const result = spawnSync("git", ["rev-parse", "HEAD"], {
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
-  }).stdout.trim();
+  });
+  if (result.status !== 0) {
+    return null;
+  }
+  return result.stdout.trim();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -263,7 +268,11 @@ export async function runLoop(
       console.log(pc.green("  All tasks already complete!"));
       console.log(pc.green("==========================================="));
 
-      unlinkSync(options.prdPath);
+      try {
+        unlinkSync(options.prdPath);
+      } catch (err) {
+        logWarning(`Failed to delete PRD file: ${err}`);
+      }
       notify(`Ralph finished ${projectName} — all tasks already complete.`);
       process.exit(0);
     }
@@ -439,7 +448,7 @@ export async function runLoop(
     }
 
     // Push after commit
-    if (config.pushAfterCommit && !config.skipCommit) {
+    if (config.pushAfterCommit && !config.skipCommit && headBefore) {
       pushAfterCommit(headBefore);
     }
 
@@ -489,7 +498,11 @@ export async function runLoop(
       console.log(`  Log: ${logFile}`);
       console.log(pc.green("==========================================="));
 
-      unlinkSync(options.prdPath);
+      try {
+        unlinkSync(options.prdPath);
+      } catch (err) {
+        logWarning(`Failed to delete PRD file: ${err}`);
+      }
       notify(
         `Ralph finished ${projectName} — all tasks complete after ${iteration} iterations. All tests passing.`,
       );

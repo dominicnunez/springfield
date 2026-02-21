@@ -44,7 +44,11 @@ export function appendProgress(
   result: IterationResult,
 ): void {
   const entry = formatProgressEntry(result);
-  appendFileSync(progressFile, entry);
+  try {
+    appendFileSync(progressFile, entry);
+  } catch (err) {
+    console.error(`[PROGRESS ERROR] Failed to append to progress file: ${err}`);
+  }
 }
 
 /**
@@ -81,7 +85,13 @@ export function appendFailure(
   lines.push("---");
   lines.push("");
 
-  appendFileSync(progressFile, lines.join("\n"));
+  try {
+    appendFileSync(progressFile, lines.join("\n"));
+  } catch (err) {
+    console.error(
+      `[PROGRESS ERROR] Failed to append failure to progress file: ${err}`,
+    );
+  }
 }
 
 /**

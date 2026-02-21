@@ -29,7 +29,11 @@ function timestamp(): string {
 function writeToLogFile(level: string, message: string): void {
   if (!logFilePath) return;
   const line = `[${timestamp()}] [${level}] ${message}\n`;
-  appendFileSync(logFilePath, line);
+  try {
+    appendFileSync(logFilePath, line);
+  } catch (err) {
+    console.error(`[LOG ERROR] Failed to write to log file: ${err}`);
+  }
 }
 
 export function logInfo(message: string): void {
@@ -98,7 +102,13 @@ export function logSessionStart(
     "",
   ].join("\n");
 
-  appendFileSync(logFilePath, header);
+  try {
+    appendFileSync(logFilePath, header);
+  } catch (err) {
+    console.error(
+      `[LOG ERROR] Failed to write session start to log file: ${err}`,
+    );
+  }
 }
 
 export function logAiOutput(output: string, truncateLines = 50): void {
@@ -106,10 +116,14 @@ export function logAiOutput(output: string, truncateLines = 50): void {
 
   const lines = output.split("\n");
   const truncated = lines.slice(0, truncateLines).join("\n");
-  appendFileSync(logFilePath, `${truncated}\n`);
+  try {
+    appendFileSync(logFilePath, `${truncated}\n`);
 
-  if (lines.length > truncateLines) {
-    appendFileSync(logFilePath, "[... truncated ...]\n");
+    if (lines.length > truncateLines) {
+      appendFileSync(logFilePath, "[... truncated ...]\n");
+    }
+  } catch (err) {
+    console.error(`[LOG ERROR] Failed to write AI output to log file: ${err}`);
   }
 }
 
