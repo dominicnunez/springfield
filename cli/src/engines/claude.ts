@@ -1,7 +1,10 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { EffortLevel } from "../config/loader.js";
 import type { Engine, EngineResult } from "./base.js";
+
+const SAFETY_TIMEOUT_MS = 45 * 60 * 1000;
+const SIGKILL_DELAY_MS = 5000;
 
 export class ClaudeEngine implements Engine {
   name = "claude";
@@ -15,7 +18,6 @@ export class ClaudeEngine implements Engine {
 
   isAvailable(): boolean {
     try {
-      const { spawnSync } = require("node:child_process");
       const result = spawnSync("which", ["claude"], { encoding: "utf-8" });
       return result.status === 0;
     } catch {
@@ -57,7 +59,7 @@ export class ClaudeEngine implements Engine {
             try {
               child.kill("SIGKILL");
             } catch {}
-          }, 5000);
+          }, SIGKILL_DELAY_MS);
         }
       };
 
@@ -146,19 +148,16 @@ export class ClaudeEngine implements Engine {
       });
 
       // Safety timeout: 45 minutes max per step
-      const safetyTimeout = setTimeout(
-        () => {
-          if (!resultEvent) {
-            process.stderr.write(
-              "\n[sfk] Safety timeout reached (45 min), killing Claude process\n",
-            );
-            killChild();
-          }
-        },
-        45 * 60 * 1000,
-      );
+      const safetyTimeout = setTimeout(() => {
+        if (!resultEvent) {
+          process.stderr.write(
+            "\n[sfk] Safety timeout reached (45 min), killing Claude process\n",
+          );
+          killChild();
+        }
+      }, SAFETY_TIMEOUT_MS);
 
-      child.on("close", () => {
+      child.once("close", () => {
         clearTimeout(safetyTimeout);
       });
     });

@@ -1,8 +1,11 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { DEFAULT_OC_PRIME_MODEL } from "../config/loader.js";
 import { logWarning } from "../ui/logger.js";
 import type { Engine, EngineResult } from "./base.js";
+
+const SAFETY_TIMEOUT_MS = 45 * 60 * 1000;
+const SIGKILL_DELAY_MS = 5000;
 
 interface OpenCodeEvent {
   type: string;
@@ -41,7 +44,6 @@ export class OpenCodeEngine implements Engine {
   }
 
   isAvailable(): boolean {
-    const { spawnSync } = require("node:child_process");
     const result = spawnSync("which", ["opencode"], { encoding: "utf-8" });
     return result.status === 0;
   }
@@ -71,7 +73,7 @@ export class OpenCodeEngine implements Engine {
             try {
               child.kill("SIGKILL");
             } catch {}
-          }, 5000);
+          }, SIGKILL_DELAY_MS);
         }
       };
 
@@ -138,7 +140,9 @@ export class OpenCodeEngine implements Engine {
             killChild();
           }
         } catch (err) {
-          logWarning(`Failed to parse OpenCode event: ${err}`);
+          logWarning(
+            `Failed to parse OpenCode event: ${err}. Raw: ${line.slice(0, 100)}`,
+          );
           process.stdout.write(`${line}\n`);
           output += `${line}\n`;
         }
@@ -185,17 +189,14 @@ export class OpenCodeEngine implements Engine {
         });
       });
 
-      const safetyTimeout = setTimeout(
-        () => {
-          process.stderr.write(
-            "\n[sfk] Safety timeout reached (45 min), killing OpenCode process\n",
-          );
-          killChild();
-        },
-        45 * 60 * 1000,
-      );
+      const safetyTimeout = setTimeout(() => {
+        process.stderr.write(
+          "\n[sfk] Safety timeout reached (45 min), killing OpenCode process\n",
+        );
+        killChild();
+      }, SAFETY_TIMEOUT_MS);
 
-      child.on("close", () => {
+      child.once("close", () => {
         clearTimeout(safetyTimeout);
       });
     });
