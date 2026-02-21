@@ -129,10 +129,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
       const step = opts.step as AuditStep;
       if (step && !["audit", "validate", "fix"].includes(step)) {
-        console.error(
+        throw new Error(
           `Invalid step: ${step}. Must be audit, validate, or fix.`,
         );
-        process.exit(1);
       }
 
       Object.assign(auditCliOptions, {

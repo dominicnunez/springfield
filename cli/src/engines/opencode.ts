@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
+import { DEFAULT_OC_PRIME_MODEL } from "../config/loader.js";
 import { logWarning } from "../ui/logger.js";
 import type { Engine, EngineResult } from "./base.js";
 
@@ -33,7 +34,7 @@ export class OpenCodeEngine implements Engine {
   private fallbackModel: string | undefined;
   private usingFallback = false;
 
-  constructor(model: string = "big-pickle", fallbackModel?: string) {
+  constructor(model: string = DEFAULT_OC_PRIME_MODEL, fallbackModel?: string) {
     this.primaryModel = model;
     this.model = model;
     this.fallbackModel = fallbackModel;
@@ -136,7 +137,8 @@ export class OpenCodeEngine implements Engine {
             completed = true;
             killChild();
           }
-        } catch {
+        } catch (err) {
+          logWarning(`Failed to parse OpenCode event: ${err}`);
           process.stdout.write(`${line}\n`);
           output += `${line}\n`;
         }

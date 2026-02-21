@@ -80,8 +80,8 @@ function notify(message: string): void {
         stdio: "ignore",
       });
     }
-  } catch {
-    // openclaw not available
+  } catch (err) {
+    logInfo(`Notification failed: ${err}`);
   }
 }
 
