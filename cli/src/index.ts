@@ -36,7 +36,9 @@ async function main(): Promise<void> {
 
     await runLoop(finalConfig, runOptions);
   } catch (error) {
-    logError(error instanceof Error ? error.message : String(error));
+    logError(
+      error instanceof Error ? error.stack || error.message : String(error),
+    );
     process.exitCode = 1;
   }
 }

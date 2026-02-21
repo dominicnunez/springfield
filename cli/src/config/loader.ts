@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { logWarning } from "../ui/logger.js";
 
 export type EngineType = "opencode" | "claude";
 export type EffortLevel = "high" | "medium" | "low";
@@ -335,10 +336,10 @@ function checkLegacyConfig(): boolean {
     const locations: string[] = [];
     if (legacyGlobal) locations.push(LEGACY_GLOBAL_FILE);
     if (legacyProject) locations.push(LEGACY_PROJECT_FILE);
-    console.warn(
-      `[WARN] Found legacy config: ${locations.join(", ")}\n` +
-        `       Migrate to new format at ${GLOBAL_CONFIG_FILE}\n` +
-        `       See config.example for the new INI format.`,
+    logWarning(
+      `Found legacy config: ${locations.join(", ")}. ` +
+        `Migrate to new format at ${GLOBAL_CONFIG_FILE}. ` +
+        `See config.example for the new INI format.`,
     );
     return true;
   }
@@ -393,30 +394,60 @@ export function loadConfig(): Config {
     // New INI format
     ensureGlobalConfig();
 
-    const globalContent = readFileSync(GLOBAL_CONFIG_FILE, "utf-8");
-    applyConfigToConfig(config, parseConfigFile(globalContent));
+    try {
+      const globalContent = readFileSync(GLOBAL_CONFIG_FILE, "utf-8");
+      applyConfigToConfig(config, parseConfigFile(globalContent));
+    } catch (err) {
+      throw new Error(
+        `Failed to read global config from ${GLOBAL_CONFIG_FILE}: ${err}`,
+      );
+    }
 
     const projectPath = join(process.cwd(), PROJECT_CONFIG_FILE);
     if (existsSync(projectPath)) {
-      const projectContent = readFileSync(projectPath, "utf-8");
-      applyConfigToConfig(config, parseConfigFile(projectContent));
+      try {
+        const projectContent = readFileSync(projectPath, "utf-8");
+        applyConfigToConfig(config, parseConfigFile(projectContent));
+      } catch (err) {
+        throw new Error(
+          `Failed to read project config from ${projectPath}: ${err}`,
+        );
+      }
     }
   } else if (hasLegacy) {
     // Fall back to legacy .env format
     if (existsSync(LEGACY_GLOBAL_FILE)) {
-      const content = readFileSync(LEGACY_GLOBAL_FILE, "utf-8");
-      applyEnvToConfig(config, parseEnvFile(content));
+      try {
+        const content = readFileSync(LEGACY_GLOBAL_FILE, "utf-8");
+        applyEnvToConfig(config, parseEnvFile(content));
+      } catch (err) {
+        throw new Error(
+          `Failed to read legacy global config from ${LEGACY_GLOBAL_FILE}: ${err}`,
+        );
+      }
     }
     const legacyProjectPath = join(process.cwd(), LEGACY_PROJECT_FILE);
     if (existsSync(legacyProjectPath)) {
-      const content = readFileSync(legacyProjectPath, "utf-8");
-      applyEnvToConfig(config, parseEnvFile(content));
+      try {
+        const content = readFileSync(legacyProjectPath, "utf-8");
+        applyEnvToConfig(config, parseEnvFile(content));
+      } catch (err) {
+        throw new Error(
+          `Failed to read legacy project config from ${legacyProjectPath}: ${err}`,
+        );
+      }
     }
   } else {
     // No config at all — create new global config
     ensureGlobalConfig();
-    const globalContent = readFileSync(GLOBAL_CONFIG_FILE, "utf-8");
-    applyConfigToConfig(config, parseConfigFile(globalContent));
+    try {
+      const globalContent = readFileSync(GLOBAL_CONFIG_FILE, "utf-8");
+      applyConfigToConfig(config, parseConfigFile(globalContent));
+    } catch (err) {
+      throw new Error(
+        `Failed to read newly created global config from ${GLOBAL_CONFIG_FILE}: ${err}`,
+      );
+    }
   }
 
   // Environment variables override everything (use legacy env var names for compat)

@@ -64,43 +64,55 @@ function main() {
     if (existsSync(srcPath)) {
       // Prefer tsx on Windows (better compatibility)
       const runners = isWindows ? ["tsx", "bun"] : ["bun", "tsx"];
+      let runnerFound = false;
 
       for (const runner of runners) {
         if (!commandExists(runner)) continue;
 
+        runnerFound = true;
         const runnerArgs = runner === "bun" ? ["run", srcPath] : [srcPath];
         const userArgs = process.argv.slice(2);
 
         let result;
-        if (isWindows) {
-          // On Windows, use cmd.exe /c to run .cmd files
-          result = spawnSync(
-            "cmd.exe",
-            ["/c", runner, ...runnerArgs, ...userArgs],
-            {
+        try {
+          if (isWindows) {
+            // On Windows, use cmd.exe /c to run .cmd files
+            result = spawnSync(
+              "cmd.exe",
+              ["/c", runner, ...runnerArgs, ...userArgs],
+              {
+                stdio: "inherit",
+                cwd: process.cwd(),
+              }
+            );
+          } else {
+            result = spawnSync(runner, [...runnerArgs, ...userArgs], {
               stdio: "inherit",
               cwd: process.cwd(),
-            }
-          );
-        } else {
-          result = spawnSync(runner, [...runnerArgs, ...userArgs], {
-            stdio: "inherit",
-            cwd: process.cwd(),
-          });
-        }
+            });
+          }
 
-        if (!result.error) {
-          process.exit(result.status ?? 1);
-        } else {
-          console.error(`Failed to run ${runner}: ${result.error.message}`);
+          if (!result.error) {
+            process.exit(result.status ?? 1);
+          } else {
+            console.error(`Failed to run ${runner}: ${result.error.message}`);
+            process.exit(1);
+          }
+        } catch (err) {
+          console.error(`Error running ${runner}: ${err.message}`);
           process.exit(1);
         }
+      }
+
+      if (!runnerFound) {
+        console.error("No runtime found (tried: bun, tsx)");
+        console.error("Install bun or tsx to run in development mode.");
+        process.exit(1);
       }
     }
 
     console.error(`Binary not found: ${binaryPath}`);
     console.error("Run 'bun run build' to compile the binary for your platform.");
-    console.error("Or install tsx: npm install -g tsx");
     process.exit(1);
   }
 
