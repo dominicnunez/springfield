@@ -9,6 +9,48 @@ const cjsChildProcess = createRequire(import.meta.url)(
   "node:child_process",
 ) as typeof childProcess;
 
+function textEvent(text: string): string {
+  return JSON.stringify({
+    type: "text",
+    timestamp: Date.now(),
+    sessionID: "test-session",
+    part: { type: "text", text },
+  });
+}
+
+function stepFinishEvent(): string {
+  return JSON.stringify({
+    type: "step_finish",
+    timestamp: Date.now(),
+    sessionID: "test-session",
+    part: { type: "step-finish", reason: "stop" },
+  });
+}
+
+function stepStartEvent(): string {
+  return JSON.stringify({
+    type: "step_start",
+    timestamp: Date.now(),
+    sessionID: "test-session",
+    part: { type: "step-start" },
+  });
+}
+
+function errorEvent(error: {
+  type?: string;
+  code?: string;
+  message?: string;
+  name?: string;
+  data?: { message?: string; responseBody?: string };
+}): string {
+  return JSON.stringify({
+    type: "error",
+    timestamp: Date.now(),
+    sessionID: "test-session",
+    error,
+  });
+}
+
 function createMockChild(
   stdoutLines: string[],
   stderrChunks: string[] = [],
@@ -152,41 +194,14 @@ describe("OpenCodeEngine", () => {
     });
   });
 
-  describe("rate limit detection", () => {
-    const rateLimitPatterns = [
-      // Soft rate limit patterns
-      "Error: rate limit exceeded",
-      "statusCode 429 returned",
-      "Too many requests, slow down",
-      "tokens per minute limit reached",
-      "at capacity, please wait",
-      "retry after 30 seconds",
-      // Hard rate limit patterns
-      "insufficient_quota for this request",
-      "insufficient balance on account",
-      "exceeded current quota for usage tier",
-      "please update billing details",
-    ];
-
-    for (const pattern of rateLimitPatterns) {
-      test(`detects rate limit pattern: "${pattern}"`, async () => {
-        const mockChild = createMockChild([pattern]);
-        const spy = spyOn(childProcess, "spawn").mockReturnValue(
-          mockChild as unknown as ReturnType<typeof childProcess.spawn>,
-        );
-
-        const engine = new OpenCodeEngine();
-        const result = await engine.run("test prompt");
-
-        expect(result.rateLimited).toBe(true);
-
-        spy.mockRestore();
-      });
-    }
-
-    test("classifies hard rate limits correctly", async () => {
+  describe("rate limit detection via error events", () => {
+    test("detects too_many_requests error type", async () => {
       const mockChild = createMockChild([
-        "insufficient_quota for this request",
+        errorEvent({
+          type: "too_many_requests",
+          message: "Rate limit exceeded",
+        }),
+        stepFinishEvent(),
       ]);
       const spy = spyOn(childProcess, "spawn").mockReturnValue(
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
@@ -195,14 +210,20 @@ describe("OpenCodeEngine", () => {
       const engine = new OpenCodeEngine();
       const result = await engine.run("test prompt");
 
-      expect(result.hardRateLimited).toBe(true);
-      expect(result.softRateLimited).toBe(false);
+      expect(result.rateLimited).toBe(true);
+      expect(result.softRateLimited).toBe(true);
 
       spy.mockRestore();
     });
 
-    test("classifies soft rate limits correctly", async () => {
-      const mockChild = createMockChild(["Error: rate limit exceeded"]);
+    test("detects rate_limit in error code", async () => {
+      const mockChild = createMockChild([
+        errorEvent({
+          code: "rate_limit_exceeded",
+          message: "Too many requests",
+        }),
+        stepFinishEvent(),
+      ]);
       const spy = spyOn(childProcess, "spawn").mockReturnValue(
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
@@ -210,14 +231,39 @@ describe("OpenCodeEngine", () => {
       const engine = new OpenCodeEngine();
       const result = await engine.run("test prompt");
 
+      expect(result.rateLimited).toBe(true);
       expect(result.softRateLimited).toBe(true);
-      expect(result.hardRateLimited).toBe(false);
+
+      spy.mockRestore();
+    });
+
+    test("detects hard rate limit from FreeUsageLimitError", async () => {
+      const mockChild = createMockChild([
+        errorEvent({
+          type: "too_many_requests",
+          data: { responseBody: "FreeUsageLimitError: quota exceeded" },
+        }),
+        stepFinishEvent(),
+      ]);
+      const spy = spyOn(childProcess, "spawn").mockReturnValue(
+        mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+      );
+
+      const engine = new OpenCodeEngine();
+      const result = await engine.run("test prompt");
+
+      expect(result.rateLimited).toBe(true);
+      expect(result.hardRateLimited).toBe(true);
+      expect(result.softRateLimited).toBe(false);
 
       spy.mockRestore();
     });
 
     test("does not detect rate limit for normal errors", async () => {
-      const mockChild = createMockChild(["Error: file not found"]);
+      const mockChild = createMockChild([
+        errorEvent({ type: "validation_error", message: "Invalid input" }),
+        stepFinishEvent(),
+      ]);
       const spy = spyOn(childProcess, "spawn").mockReturnValue(
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
@@ -238,8 +284,8 @@ describe("OpenCodeEngine", () => {
       spawnSpy?.mockRestore();
     });
 
-    test("passes correct arguments to opencode", async () => {
-      const mockChild = createMockChild([]);
+    test("passes correct arguments to opencode with --format json", async () => {
+      const mockChild = createMockChild([stepFinishEvent()]);
       spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
@@ -249,15 +295,32 @@ describe("OpenCodeEngine", () => {
 
       expect(spawnSpy).toHaveBeenCalledWith(
         "opencode",
-        ["run", "--model", "test-model", "test prompt"],
+        ["run", "--format", "json", "--model", "test-model", "test prompt"],
         expect.objectContaining({
           cwd: process.cwd(),
         }),
       );
     });
 
-    test("returns success result on exit code 0", async () => {
-      const mockChild = createMockChild(["Task completed"]);
+    test("returns success when step_finish event received", async () => {
+      const mockChild = createMockChild([
+        stepStartEvent(),
+        textEvent("Task completed"),
+        stepFinishEvent(),
+      ]);
+      spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
+        mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+      );
+
+      const engine = new OpenCodeEngine();
+      const result = await engine.run("test");
+
+      expect(result.success).toBe(true);
+      expect(result.output).toContain("Task completed");
+    });
+
+    test("returns success on exit code 0 without step_finish", async () => {
+      const mockChild = createMockChild([textEvent("Task completed")]);
       spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
@@ -270,7 +333,7 @@ describe("OpenCodeEngine", () => {
       expect(result.output).toContain("Task completed");
     });
 
-    test("returns failure result on non-zero exit code", async () => {
+    test("returns failure on non-zero exit code without step_finish", async () => {
       const mockChild = createMockChild([], ["Error occurred"], 1);
       spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
@@ -282,6 +345,24 @@ describe("OpenCodeEngine", () => {
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
       expect(result.output).toContain("Error occurred");
+    });
+
+    test("handles non-JSON lines as raw output", async () => {
+      const mockChild = createMockChild([
+        "plain text line",
+        textEvent("JSON content"),
+        stepFinishEvent(),
+      ]);
+      spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
+        mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+      );
+
+      const engine = new OpenCodeEngine();
+      const result = await engine.run("test");
+
+      expect(result.output).toContain("plain text line");
+      expect(result.output).toContain("JSON content");
+      expect(result.success).toBe(true);
     });
 
     test("handles null status as exit code 1", async () => {

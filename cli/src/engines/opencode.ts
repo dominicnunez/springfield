@@ -3,26 +3,27 @@ import { createInterface } from "node:readline";
 import { logWarning } from "../ui/logger.js";
 import type { Engine, EngineResult } from "./base.js";
 
-// Hard rate limit patterns: quota exhausted, billing issues - won't recover with waiting
-const HARD_RATE_LIMIT_PATTERNS = [
-  /insufficient_quota/i,
-  /insufficient.balance/i,
-  /exceeded.*(usage.tier|current.quota)/i,
-  /billing.details/i,
-  /not.?included.?in.?(your|plan)/i,
-];
-
-// Soft rate limit patterns: temporary cooldowns - may recover after waiting
-const SOFT_RATE_LIMIT_PATTERNS = [
-  /rate.?limit/i,
-  /statusCode.*429/i,
-  /too.?many.?request/i,
-  /per.?minute/i,
-  /tokens.per.minute/i,
-  /over.?capacity/i,
-  /at.?capacity/i,
-  /retry.?after/i,
-];
+interface OpenCodeEvent {
+  type: string;
+  timestamp: number;
+  sessionID: string;
+  part?: {
+    type: string;
+    text?: string;
+    reason?: string;
+  };
+  error?: {
+    type?: string;
+    code?: string;
+    message?: string;
+    name?: string;
+    data?: {
+      message?: string;
+      responseBody?: string;
+      isRetryable?: boolean;
+    };
+  };
+}
 
 export class OpenCodeEngine implements Engine {
   name = "opencode";
@@ -45,7 +46,7 @@ export class OpenCodeEngine implements Engine {
   }
 
   async run(prompt: string): Promise<EngineResult> {
-    const args = ["run", "--model", this.model, prompt];
+    const args = ["run", "--format", "json", "--model", this.model, prompt];
 
     return new Promise<EngineResult>((resolve) => {
       const child = spawn("opencode", args, {
@@ -56,6 +57,10 @@ export class OpenCodeEngine implements Engine {
       let output = "";
       let stderr = "";
       let killed = false;
+      let completed = false;
+      let rateLimited = false;
+      let hardRateLimited = false;
+      let softRateLimited = false;
 
       const killChild = () => {
         if (!killed) {
@@ -82,8 +87,59 @@ export class OpenCodeEngine implements Engine {
       const rl = createInterface({ input: child.stdout });
 
       rl.on("line", (line) => {
-        process.stdout.write(`${line}\n`);
-        output += `${line}\n`;
+        if (!line.trim()) return;
+
+        try {
+          const event: OpenCodeEvent = JSON.parse(line);
+
+          if (event.type === "text" && event.part?.text) {
+            process.stdout.write(event.part.text);
+            output += event.part.text;
+          }
+
+          if (event.type === "error" && event.error) {
+            const errorType = event.error.type?.toLowerCase() || "";
+            const errorCode = event.error.code?.toLowerCase() || "";
+            const errorMsg = (
+              event.error.message ||
+              event.error.data?.message ||
+              ""
+            ).toLowerCase();
+            const responseBody = event.error.data?.responseBody || "";
+
+            if (
+              errorType === "too_many_requests" ||
+              errorCode.includes("rate_limit")
+            ) {
+              rateLimited = true;
+              if (
+                responseBody.includes("FreeUsageLimitError") ||
+                errorMsg.includes("insufficient") ||
+                errorMsg.includes("quota") ||
+                errorMsg.includes("billing")
+              ) {
+                hardRateLimited = true;
+              } else {
+                softRateLimited = true;
+              }
+            }
+
+            const errMsg =
+              event.error.data?.message ||
+              event.error.message ||
+              event.error.name ||
+              "Unknown error";
+            output += `[error] ${errMsg}\n`;
+          }
+
+          if (event.type === "step_finish") {
+            completed = true;
+            killChild();
+          }
+        } catch {
+          process.stdout.write(`${line}\n`);
+          output += `${line}\n`;
+        }
       });
 
       child.stderr?.on("data", (chunk: Buffer) => {
@@ -95,14 +151,30 @@ export class OpenCodeEngine implements Engine {
       child.on("close", (code) => {
         rl.close();
 
-        const combined = output + stderr;
-        const hardRateLimited = this.isHardRateLimited(combined);
-        const softRateLimited =
-          !hardRateLimited && this.isSoftRateLimited(combined);
-        const rateLimited = hardRateLimited || softRateLimited;
+        if (!rateLimited && output + stderr) {
+          const combined = (output + stderr).toLowerCase();
+          if (
+            combined.includes("rate limit") ||
+            combined.includes("429") ||
+            combined.includes("too many request")
+          ) {
+            rateLimited = true;
+            softRateLimited = true;
+          }
+          if (
+            combined.includes("insufficient") ||
+            combined.includes("quota") ||
+            combined.includes("billing")
+          ) {
+            hardRateLimited = true;
+            softRateLimited = false;
+          }
+        }
+
+        const success = completed || code === 0;
 
         resolve({
-          success: code === 0,
+          success,
           output: output || stderr,
           exitCode: code ?? 1,
           rateLimited,
@@ -127,23 +199,6 @@ export class OpenCodeEngine implements Engine {
     });
   }
 
-  /**
-   * Check if output indicates hard rate limiting (quota/billing - immediate fallback)
-   */
-  private isHardRateLimited(output: string): boolean {
-    return HARD_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(output));
-  }
-
-  /**
-   * Check if output indicates soft rate limiting (temporary - retry first)
-   */
-  private isSoftRateLimited(output: string): boolean {
-    return SOFT_RATE_LIMIT_PATTERNS.some((pattern) => pattern.test(output));
-  }
-
-  /**
-   * Switch to fallback model
-   */
   switchToFallback(): boolean {
     if (this.fallbackModel && !this.usingFallback) {
       logWarning(
@@ -163,17 +218,11 @@ export class OpenCodeEngine implements Engine {
     return false;
   }
 
-  /**
-   * Reset to primary model
-   */
   resetToPrimary(): void {
     this.model = this.primaryModel;
     this.usingFallback = false;
   }
 
-  /**
-   * Check if currently using fallback
-   */
   isUsingFallback(): boolean {
     return this.usingFallback;
   }
