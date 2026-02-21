@@ -120,7 +120,10 @@ export function logSessionStart(
   }
 }
 
-export function logAiOutput(output: string, truncateLines = DEFAULT_MAX_LOG_LINES): void {
+export function logAiOutput(
+  output: string,
+  truncateLines = DEFAULT_MAX_LOG_LINES,
+): void {
   if (!logFilePath) return;
 
   const lines = output.split("\n");

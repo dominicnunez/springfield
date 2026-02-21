@@ -130,7 +130,9 @@ function formatProgressEntry(result: IterationResult): string {
  */
 export function initProgress(progressDir: string, progressFile: string): void {
   if (!progressDir || !progressFile) {
-    console.error("[PROGRESS ERROR] progressDir and progressFile must be provided");
+    console.error(
+      "[PROGRESS ERROR] progressDir and progressFile must be provided",
+    );
     return;
   }
 

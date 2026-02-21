@@ -20,7 +20,13 @@ import {
 } from "../../engines/base.js";
 import { ClaudeEngine } from "../../engines/claude.js";
 import { OpenCodeEngine } from "../../engines/opencode.js";
-import { logDebug, logError, logInfo, logSuccess, logWarning } from "../../ui/logger.js";
+import {
+  logDebug,
+  logError,
+  logInfo,
+  logSuccess,
+  logWarning,
+} from "../../ui/logger.js";
 
 // ─────────────────────────────────────────────────────────────
 // Types
