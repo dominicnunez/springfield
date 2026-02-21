@@ -188,6 +188,11 @@ export async function runLoop(
 
   logSessionStart(projectName, config.engine, getCurrentModel(config));
 
+  if (config.maxIterations < -1) {
+    logWarning("Invalid maxIterations value, defaulting to 10");
+    config.maxIterations = 10;
+  }
+
   const iterStr =
     config.maxIterations === -1
       ? "Infinite mode"
@@ -564,8 +569,7 @@ export async function runSingleTask(
     logError(
       `'${engine.name}' command not found. Please install ${engine.name === "claude" ? "Claude CLI" : "OpenCode CLI"}.`,
     );
-    process.exitCode = 1;
-    return;
+    process.exit(1);
   }
 
   const testCmd = config.testCmd || detectTestCommand();
@@ -629,8 +633,7 @@ export async function runSingleTask(
           break;
         } else {
           logError("Hard rate limit and no fallback available");
-          process.exitCode = 1;
-          return;
+          process.exit(1);
         }
       }
 
@@ -654,8 +657,7 @@ export async function runSingleTask(
             break;
           } else {
             logError("Soft rate limit persisted, no fallback available");
-            process.exitCode = 1;
-            return;
+            process.exit(1);
           }
         }
       }
@@ -664,8 +666,7 @@ export async function runSingleTask(
 
   if (!result.success) {
     logError(`${engine.name} failed with exit code ${result.exitCode}`);
-    process.exitCode = result.exitCode;
-    return;
+    process.exit(result.exitCode);
   }
 
   // Test verification gate
@@ -680,8 +681,7 @@ export async function runSingleTask(
         "No test files were created or modified",
         "You MUST write tests before the task can be completed",
       );
-      process.exitCode = 1;
-      return;
+      process.exit(1);
     }
 
     if (!verification.testsPassed) {
@@ -692,8 +692,7 @@ export async function runSingleTask(
         "Tests failed",
         "Fix the failing tests before marking the task complete",
       );
-      process.exitCode = 1;
-      return;
+      process.exit(1);
     }
 
     logInfo("Verification passed");

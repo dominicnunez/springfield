@@ -171,10 +171,16 @@ export function mergeOptions(config: Config, cliOptions: CliOptions): Config {
   }
 
   if (cliOptions.maxIterations !== undefined) {
+    if (cliOptions.maxIterations < -1) {
+      cliOptions.maxIterations = -1;
+    }
     merged.maxIterations = cliOptions.maxIterations;
   }
 
   if (cliOptions.sleepSeconds !== undefined) {
+    if (cliOptions.sleepSeconds < 0) {
+      cliOptions.sleepSeconds = 0;
+    }
     merged.sleepSeconds = cliOptions.sleepSeconds;
   }
 
