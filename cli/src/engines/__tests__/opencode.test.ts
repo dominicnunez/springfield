@@ -27,6 +27,15 @@ function stepFinishEvent(): string {
   });
 }
 
+function stepFinishToolCallsEvent(): string {
+  return JSON.stringify({
+    type: "step_finish",
+    timestamp: Date.now(),
+    sessionID: "test-session",
+    part: { type: "step-finish", reason: "tool-calls" },
+  });
+}
+
 function stepStartEvent(): string {
   return JSON.stringify({
     type: "step_start",
@@ -316,6 +325,27 @@ describe("OpenCodeEngine", () => {
       const result = await engine.run("test");
 
       expect(result.success).toBe(true);
+      expect(result.output).toContain("Task completed");
+    });
+
+    test("ignores step_finish with tool-calls reason", async () => {
+      const mockChild = createMockChild([
+        stepStartEvent(),
+        textEvent("Working..."),
+        stepFinishToolCallsEvent(),
+        stepStartEvent(),
+        textEvent("Task completed"),
+        stepFinishEvent(),
+      ]);
+      spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
+        mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+      );
+
+      const engine = new OpenCodeEngine();
+      const result = await engine.run("test");
+
+      expect(result.success).toBe(true);
+      expect(result.output).toContain("Working...");
       expect(result.output).toContain("Task completed");
     });
 

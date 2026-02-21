@@ -132,7 +132,7 @@ export class OpenCodeEngine implements Engine {
             output += `[error] ${errMsg}\n`;
           }
 
-          if (event.type === "step_finish") {
+          if (event.type === "step_finish" && event.part?.reason === "stop") {
             completed = true;
             killChild();
           }
