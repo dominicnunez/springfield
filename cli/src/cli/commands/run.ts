@@ -107,9 +107,16 @@ function pushAfterCommit(headBefore: string): void {
   logInfo("New commit detected, pushing to origin");
   console.log("  Pushing changes to origin...");
 
-  const branch = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+  const branchResult = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
     encoding: "utf-8",
-  }).stdout.trim();
+  });
+  const branch = branchResult.stdout.trim();
+
+  if (!branch || branchResult.status !== 0) {
+    logWarning("Failed to detect current branch, skipping push");
+    console.log("  Failed to detect branch (will retry next iteration)");
+    return;
+  }
 
   // Check if branch has upstream
   const hasUpstream = spawnSync(
@@ -130,7 +137,9 @@ function pushAfterCommit(headBefore: string): void {
     logInfo("Push successful");
     console.log(`  Pushed to origin/${branch}`);
   } else {
-    logWarning(`Push failed: ${pushResult.stderr || "unknown error"} (will retry next iteration)`);
+    logWarning(
+      `Push failed: ${pushResult.stderr || "unknown error"} (will retry next iteration)`,
+    );
     console.log("  Push failed (will retry next iteration)");
   }
 }
