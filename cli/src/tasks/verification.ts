@@ -164,8 +164,11 @@ export function runTests(testCmd: string): TestResult {
   console.log(`  Running test verification: ${testCmd}`);
   printDivider();
 
-  const result = spawnSync(testCmd, [], {
-    shell: true,
+  const parts = testCmd.split(/\s+/);
+  const cmd = parts[0];
+  const args = parts.slice(1);
+
+  const result = spawnSync(cmd, args, {
     encoding: "utf-8",
     cwd: process.cwd(),
     stdio: ["inherit", "pipe", "pipe"],
