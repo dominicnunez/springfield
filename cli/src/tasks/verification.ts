@@ -93,7 +93,9 @@ export function getChangedTestFiles(): string[] {
     cwd: process.cwd(),
   });
 
-  if (unstaged.stdout) {
+  if (unstaged.error) {
+    logWarning(`git diff failed: ${unstaged.error.message}`);
+  } else if (unstaged.stdout) {
     for (const file of unstaged.stdout.split("\n")) {
       if (file && isTestFile(file)) {
         testFiles.add(file);
@@ -107,7 +109,9 @@ export function getChangedTestFiles(): string[] {
     cwd: process.cwd(),
   });
 
-  if (staged.stdout) {
+  if (staged.error) {
+    logWarning(`git diff --cached failed: ${staged.error.message}`);
+  } else if (staged.stdout) {
     for (const file of staged.stdout.split("\n")) {
       if (file && isTestFile(file)) {
         testFiles.add(file);
@@ -125,7 +129,9 @@ export function getChangedTestFiles(): string[] {
     },
   );
 
-  if (lastCommit.stdout && lastCommit.status === 0) {
+  if (lastCommit.error) {
+    logWarning(`git diff HEAD~1 HEAD failed: ${lastCommit.error.message}`);
+  } else if (lastCommit.stdout && lastCommit.status === 0) {
     for (const file of lastCommit.stdout.split("\n")) {
       if (file && isTestFile(file)) {
         testFiles.add(file);
@@ -217,8 +223,8 @@ export function verify(testCmd: string | undefined): VerificationResult {
   // Skip if no test command
   if (!testCmd) {
     logWarning("No test command detected, skipping verification");
-    result.testsWritten = true; // Don't block on this
-    result.testsPassed = true;
+    result.testsWritten = false;
+    result.testsPassed = false;
     return result;
   }
 

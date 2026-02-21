@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   appendFileSync,
   existsSync,
@@ -25,8 +26,9 @@ export function getProgressFile(
   projectName: string,
   progressDir: string,
 ): string {
-  const sanitized = projectName.replace(/[^a-zA-Z0-9-_]/g, "_");
-  return join(progressDir, `progress-${sanitized}.log`);
+  const sanitized = projectName.replace(/[^a-zA-Z0-9]/g, "_");
+  const hash = createHash("md5").update(projectName).digest("hex").slice(0, 6);
+  return join(progressDir, `progress-${sanitized}-${hash}.log`);
 }
 
 /**

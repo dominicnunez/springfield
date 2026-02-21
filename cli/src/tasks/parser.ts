@@ -18,7 +18,14 @@ export function parsePrd(prdPath: string): Task[] {
     return [];
   }
 
-  const content = readFileSync(prdPath, "utf-8");
+  let content: string;
+  try {
+    content = readFileSync(prdPath, "utf-8");
+  } catch (err) {
+    logWarning(`Failed to read ${prdPath}: ${err}`);
+    return [];
+  }
+
   const lines = content.split("\n");
   const tasks: Task[] = [];
 
@@ -70,16 +77,23 @@ export function markTaskComplete(prdPath: string, task: Task): void {
     return;
   }
 
+  let content: string;
   try {
-    const content = readFileSync(prdPath, "utf-8");
-    const lines = content.split("\n");
-
-    if (task.lineNumber < lines.length) {
-      lines[task.lineNumber] = lines[task.lineNumber].replace(/\[\s\]/, "[x]");
-      writeFileSync(prdPath, lines.join("\n"));
-    }
+    content = readFileSync(prdPath, "utf-8");
   } catch (err) {
-    logWarning(`Failed to mark task complete in ${prdPath}: ${err}`);
+    logWarning(`Failed to read ${prdPath}: ${err}`);
+    return;
+  }
+
+  const lines = content.split("\n");
+
+  if (task.lineNumber < lines.length) {
+    lines[task.lineNumber] = lines[task.lineNumber].replace(/\[\s\]/, "[x]");
+    try {
+      writeFileSync(prdPath, lines.join("\n"));
+    } catch (err) {
+      logWarning(`Failed to write ${prdPath}: ${err}`);
+    }
   }
 }
 

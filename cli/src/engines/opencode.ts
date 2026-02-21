@@ -78,6 +78,7 @@ export class OpenCodeEngine implements Engine {
       };
 
       if (!child.stdout) {
+        child.kill();
         resolve({
           success: false,
           output: "Failed to spawn opencode: no stdout",

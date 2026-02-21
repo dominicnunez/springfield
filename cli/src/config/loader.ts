@@ -122,15 +122,7 @@ export function parseConfigFile(content: string): Record<string, string> {
     }
 
     const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-
-    // Remove quotes if present
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
+    const value = removeQuotes(trimmed.slice(eqIndex + 1).trim());
 
     const fullKey = currentSection ? `${currentSection}.${key}` : key;
     result[fullKey] = value;
@@ -153,14 +145,7 @@ function parseEnvFile(content: string): Record<string, string> {
     if (eqIndex === -1) continue;
 
     const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
+    const value = removeQuotes(trimmed.slice(eqIndex + 1).trim());
 
     result[key] = value;
   }
@@ -172,6 +157,16 @@ function parseBool(value: string): boolean | undefined {
   if (value === "true") return true;
   if (value === "false") return false;
   return undefined;
+}
+
+function removeQuotes(value: string): string {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
 }
 
 function parseIntSafe(value: string, defaultVal: number): number {
