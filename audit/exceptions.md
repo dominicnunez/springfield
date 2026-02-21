@@ -160,6 +160,27 @@
 
 <!-- Findings where the audit misread the code or described behavior that doesn't occur -->
 
+### Test command may fail silently on non-existent test framework
+
+**Location:** `cli/src/tasks/verification.ts:173-181`
+**Date:** 2026-02-21
+
+**Reason:** The error is NOT silently swallowed. When the test command doesn't exist, spawnSync returns an error, which is caught at lines 183-191. The code logs "Test command not found: ${cmd}" to console and returns a TestResult with passed: false. The audit's own "Suggested fix" acknowledges "error handling is adequate". This is working as intended, not a bug.
+
+### Comment references deprecated "ralph" terminology
+
+**Location:** `cli/src/cli/commands/audit.ts:43, cli/src/cli/commands/run.ts:28`
+**Date:** 2026-02-21
+
+**Reason:** The specific lines referenced do not contain "ralph". Line 43 of audit.ts is `const REPORT_FILE = join(AUDIT_DIR, "report.md");` and line 28 of run.ts is imports. While "ralph" does exist elsewhere in the codebase (e.g., loader.ts and run.ts:174), the audit misidentified the line numbers.
+
+### Hardcoded fallback for /tmp directory check
+
+**Location:** `cli/src/config/loader.ts:277`
+**Date:** 2026-02-21
+
+**Reason:** The audit claims "/tmp/subdir would be blocked by the startsWith check", but this is incorrect. The check is `absolute.startsWith("/tmp/") || absolute === "/tmp"`, so `/tmp/subdir` would pass because it starts with "/tmp/". The hardcoded string is real but the specific claim about subdirectories being blocked is false.
+
 ### Regex patterns not pre-compiled
 
 **Location:** `cli/src/tasks/verification.ts:6`
