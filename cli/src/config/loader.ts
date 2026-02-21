@@ -190,6 +190,10 @@ export function applyConfigToConfig(
   const engineType = parsed["engine.type"];
   if (engineType === "claude" || engineType === "opencode") {
     config.engine = engineType;
+  } else if (engineType !== undefined) {
+    logWarning(
+      `Unknown engine type "${engineType}" in config, using default (opencode)`,
+    );
   }
 
   // [models]
@@ -268,16 +272,29 @@ export function applyConfigToConfig(
   if (parsed["logging.log-dir"]?.trim())
     config.logDir = validatePath(parsed["logging.log-dir"], "log-dir");
   if (parsed["logging.progress-dir"]?.trim())
-    config.progressDir = validatePath(parsed["logging.progress-dir"], "progress-dir");
+    config.progressDir = validatePath(
+      parsed["logging.progress-dir"],
+      "progress-dir",
+    );
 }
+
+const ALLOWED_TEMP_PATHS = ["/tmp"];
 
 function validatePath(path: string, name: string): string {
   const resolved = path.replace(/^~/, homedir());
-  const absolute = resolved.startsWith("/") ? resolved : join(process.cwd(), resolved);
-  if (absolute.startsWith(homedir()) || absolute.startsWith("/tmp/") || absolute === "/tmp") {
+  const absolute = resolved.startsWith("/")
+    ? resolved
+    : join(process.cwd(), resolved);
+  if (
+    absolute.startsWith(homedir()) ||
+    absolute.startsWith("/tmp/") ||
+    ALLOWED_TEMP_PATHS.includes(absolute)
+  ) {
     return path;
   }
-  logWarning(`${name} path "${path}" escapes allowed directories, using default`);
+  logWarning(
+    `${name} path "${path}" escapes allowed directories, using default`,
+  );
   return "";
 }
 
@@ -316,7 +333,8 @@ function applyEnvToConfig(config: Config, env: Record<string, string>): void {
       env.MAX_CONSECUTIVE_FAILURES,
       3,
     );
-  if (env.RALPH_LOG_DIR?.trim()) config.logDir = validatePath(env.RALPH_LOG_DIR, "log-dir");
+  if (env.RALPH_LOG_DIR?.trim())
+    config.logDir = validatePath(env.RALPH_LOG_DIR, "log-dir");
   if (env.RALPH_PROGRESS_DIR?.trim())
     config.progressDir = validatePath(env.RALPH_PROGRESS_DIR, "progress-dir");
 }
