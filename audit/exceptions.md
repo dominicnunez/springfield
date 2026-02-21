@@ -135,6 +135,27 @@
 
 **Reason:** The code already handles both result.error and result.status separately (lines 92-93). The `?? 1` fallback is appropriate for when status is null due to spawn failure.
 
+### Magic numbers not extracted to named constants
+
+**Location:** `cli/src/engines/opencode.ts:7`
+**Date:** 2026-02-21
+
+**Reason:** The constant SAFETY_TIMEOUT_MS already exists at line 7. The audit claimed the magic number 45 was not extracted, but the constant `SAFETY_TIMEOUT_MS = 45 * 60 * 1000` is already properly named.
+
+### CLI maxIterations validation modifies wrong variable
+
+**Location:** `cli/src/cli/args.ts:173-177`
+**Date:** 2026-02-21
+
+**Reason:** The code DOES apply the fix to merged.maxIterations at line 177. After clamping cliOptions.maxIterations to -1 at line 175, line 177 correctly assigns the modified value to merged.maxIterations. The fix is NOT lost.
+
+### Inconsistent error handling patterns
+
+**Location:** `cli/src/config/loader.ts:411-463`
+**Date:** 2026-02-21
+
+**Reason:** Every readFileSync call in this block is already wrapped in its own try-catch block (lines 411-417, 421-428, 433-440, 444-451, 456-463). The audit claimed some relied on an outer try-catch, but all have explicit error handling.
+
 ## False Positives
 
 <!-- Findings where the audit misread the code or described behavior that doesn't occur -->
