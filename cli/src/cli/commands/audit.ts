@@ -88,8 +88,19 @@ function notify(message: string): void {
 function countFindings(reportPath: string): number {
   if (!existsSync(reportPath)) return 0;
   const content = readFileSync(reportPath, "utf-8");
-  const matches = content.match(/### \[/g);
-  return matches ? matches.length : 0;
+
+  const bracketMatches = content.match(/### \[/g);
+  if (bracketMatches) return bracketMatches.length;
+
+  const plainMatches = content.match(
+    /### (Security|Bug|Performance|Code Quality|Error Handling|Configuration|Reliability)/gi,
+  );
+  if (plainMatches) return plainMatches.length;
+
+  const severityMatches = content.match(/\*\*(Critical|High|Medium|Low)\*\*/gi);
+  if (severityMatches) return severityMatches.length;
+
+  return 0;
 }
 
 function ensureAuditDir(): void {

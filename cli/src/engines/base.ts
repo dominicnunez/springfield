@@ -301,16 +301,17 @@ Rules:
 2. Check for: injection flaws, auth issues, data exposure, misconfigurations, error handling gaps, race conditions, resource leaks, logic errors, misleading comments, dead code/config, magic numbers that should be named constants, and missing error context at package boundaries
 3. Check audit/exceptions.md — do not re-flag items already listed there
 4. Include ALL real findings regardless of fix difficulty — small fixes (wrong comments, dead config, missing constants) are valid findings. The fix step decides effort, not the audit step.
-5. Write findings to audit/report.md using this format for each finding:
+5. Write findings to audit/report.md. You MUST use the write tool. Use this EXACT format for each finding:
 
-### [Category] Brief description
-- **Severity**: Critical / High / Medium / Low
-- **File**: path/to/file:line
-- **Details**: What the issue is and why it matters
-- **Suggested fix**: How to resolve it
+### [Security] Hardcoded credentials in source
+- **Severity**: Critical
+- **File**: auth.go:42
+- **Details**: Password is hardcoded instead of using environment variables
+- **Suggested fix**: Load from environment variable using os.Getenv
 
 Categories: Security, Bug, Performance, Code Quality, Error Handling, Configuration
 
+The format is critical: "### [Category]" with brackets, then severity/file/details/fix on separate lines.
 6. If no issues found, do not create audit/report.md`;
 
 export const VALIDATE_PROMPT = `Review and validate or invalidate each item in audit/report.md. Be thorough — actually read the code at every referenced file:line. Do not just trust the audit description.
