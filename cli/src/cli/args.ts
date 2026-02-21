@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { Command } from "commander";
 import type { Config, EngineType } from "../config/loader.js";
+import { VERSION } from "../version.js";
 import type { AuditStep } from "./commands/audit.js";
 
 export type CommandType = "run" | "audit";
@@ -31,8 +32,6 @@ export interface ParsedArgs {
   options: CliOptions;
   auditOptions: AuditCliOptions;
 }
-
-const VERSION = "1.0.0";
 
 function isDirectory(path: string): boolean {
   try {
