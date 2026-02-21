@@ -1,6 +1,68 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import * as childProcess from "node:child_process";
+import { EventEmitter } from "node:events";
+import { createRequire } from "node:module";
+import { Readable } from "node:stream";
 import { OpenCodeEngine } from "../opencode.js";
+
+const cjsChildProcess = createRequire(import.meta.url)(
+  "node:child_process",
+) as typeof childProcess;
+
+function createMockChild(
+  stdoutLines: string[],
+  stderrChunks: string[] = [],
+  exitCode = 0,
+): EventEmitter & {
+  stdout: Readable;
+  stderr: Readable;
+  pid: number;
+  kill: (signal?: string) => void;
+} {
+  const stdout = new Readable({ read() {} });
+  const stderr = new Readable({ read() {} });
+  const child = new EventEmitter() as ReturnType<typeof createMockChild>;
+
+  child.stdout = stdout;
+  child.stderr = stderr;
+  child.pid = 12345;
+
+  let stdoutEnded = false;
+  let closeScheduled = false;
+
+  const scheduleClose = (code: number) => {
+    if (!closeScheduled) {
+      closeScheduled = true;
+      setImmediate(() => child.emit("close", code));
+    }
+  };
+
+  const endStreams = () => {
+    if (!stdoutEnded) {
+      stdoutEnded = true;
+      stdout.push(null);
+      stderr.push(null);
+    }
+  };
+
+  child.kill = (_signal?: string) => {
+    endStreams();
+    scheduleClose(0);
+  };
+
+  setImmediate(() => {
+    for (const line of stdoutLines) {
+      stdout.push(`${line}\n`);
+    }
+    for (const chunk of stderrChunks) {
+      stderr.push(chunk);
+    }
+    endStreams();
+    scheduleClose(exitCode);
+  });
+
+  return child;
+}
 
 describe("OpenCodeEngine", () => {
   describe("constructor", () => {
@@ -24,14 +86,14 @@ describe("OpenCodeEngine", () => {
 
   describe("isAvailable", () => {
     test("returns true when opencode is in PATH", () => {
-      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
+      const spy = spyOn(cjsChildProcess, "spawnSync").mockReturnValue({
         status: 0,
         stdout: "/usr/bin/opencode",
         stderr: "",
         pid: 1,
         output: [],
         signal: null,
-      });
+      } as unknown as ReturnType<typeof childProcess.spawnSync>);
 
       const engine = new OpenCodeEngine();
       expect(engine.isAvailable()).toBe(true);
@@ -43,14 +105,14 @@ describe("OpenCodeEngine", () => {
     });
 
     test("returns false when opencode is not in PATH", () => {
-      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
+      const spy = spyOn(cjsChildProcess, "spawnSync").mockReturnValue({
         status: 1,
         stdout: "",
         stderr: "",
         pid: 1,
         output: [],
         signal: null,
-      });
+      } as unknown as ReturnType<typeof childProcess.spawnSync>);
 
       const engine = new OpenCodeEngine();
       expect(engine.isAvailable()).toBe(false);
@@ -91,7 +153,6 @@ describe("OpenCodeEngine", () => {
   });
 
   describe("rate limit detection", () => {
-    // Test via run() output since isRateLimited is private
     const rateLimitPatterns = [
       // Soft rate limit patterns
       "Error: rate limit exceeded",
@@ -109,14 +170,10 @@ describe("OpenCodeEngine", () => {
 
     for (const pattern of rateLimitPatterns) {
       test(`detects rate limit pattern: "${pattern}"`, async () => {
-        const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
-          status: 1,
-          stdout: pattern,
-          stderr: "",
-          pid: 1,
-          output: [],
-          signal: null,
-        });
+        const mockChild = createMockChild([pattern]);
+        const spy = spyOn(childProcess, "spawn").mockReturnValue(
+          mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+        );
 
         const engine = new OpenCodeEngine();
         const result = await engine.run("test prompt");
@@ -128,14 +185,12 @@ describe("OpenCodeEngine", () => {
     }
 
     test("classifies hard rate limits correctly", async () => {
-      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
-        status: 1,
-        stdout: "insufficient_quota for this request",
-        stderr: "",
-        pid: 1,
-        output: [],
-        signal: null,
-      });
+      const mockChild = createMockChild([
+        "insufficient_quota for this request",
+      ]);
+      const spy = spyOn(childProcess, "spawn").mockReturnValue(
+        mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+      );
 
       const engine = new OpenCodeEngine();
       const result = await engine.run("test prompt");
@@ -147,14 +202,10 @@ describe("OpenCodeEngine", () => {
     });
 
     test("classifies soft rate limits correctly", async () => {
-      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
-        status: 1,
-        stdout: "Error: rate limit exceeded",
-        stderr: "",
-        pid: 1,
-        output: [],
-        signal: null,
-      });
+      const mockChild = createMockChild(["Error: rate limit exceeded"]);
+      const spy = spyOn(childProcess, "spawn").mockReturnValue(
+        mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+      );
 
       const engine = new OpenCodeEngine();
       const result = await engine.run("test prompt");
@@ -166,14 +217,10 @@ describe("OpenCodeEngine", () => {
     });
 
     test("does not detect rate limit for normal errors", async () => {
-      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
-        status: 1,
-        stdout: "Error: file not found",
-        stderr: "",
-        pid: 1,
-        output: [],
-        signal: null,
-      });
+      const mockChild = createMockChild(["Error: file not found"]);
+      const spy = spyOn(childProcess, "spawn").mockReturnValue(
+        mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+      );
 
       const engine = new OpenCodeEngine();
       const result = await engine.run("test prompt");
@@ -185,40 +232,35 @@ describe("OpenCodeEngine", () => {
   });
 
   describe("run", () => {
+    let spawnSpy: ReturnType<typeof spyOn<typeof childProcess, "spawn">>;
+
+    afterEach(() => {
+      spawnSpy?.mockRestore();
+    });
+
     test("passes correct arguments to opencode", async () => {
-      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
-        status: 0,
-        stdout: "Success output",
-        stderr: "",
-        pid: 1,
-        output: [],
-        signal: null,
-      });
+      const mockChild = createMockChild([]);
+      spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
+        mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+      );
 
       const engine = new OpenCodeEngine("test-model");
       await engine.run("test prompt");
 
-      expect(spy).toHaveBeenCalledWith(
+      expect(spawnSpy).toHaveBeenCalledWith(
         "opencode",
         ["run", "--model", "test-model", "test prompt"],
         expect.objectContaining({
-          encoding: "utf-8",
-          maxBuffer: 50 * 1024 * 1024,
+          cwd: process.cwd(),
         }),
       );
-
-      spy.mockRestore();
     });
 
     test("returns success result on exit code 0", async () => {
-      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
-        status: 0,
-        stdout: "Task completed",
-        stderr: "",
-        pid: 1,
-        output: [],
-        signal: null,
-      });
+      const mockChild = createMockChild(["Task completed"]);
+      spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
+        mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+      );
 
       const engine = new OpenCodeEngine();
       const result = await engine.run("test");
@@ -226,19 +268,13 @@ describe("OpenCodeEngine", () => {
       expect(result.success).toBe(true);
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain("Task completed");
-
-      spy.mockRestore();
     });
 
     test("returns failure result on non-zero exit code", async () => {
-      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
-        status: 1,
-        stdout: "",
-        stderr: "Error occurred",
-        pid: 1,
-        output: [],
-        signal: null,
-      });
+      const mockChild = createMockChild([], ["Error occurred"], 1);
+      spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
+        mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+      );
 
       const engine = new OpenCodeEngine();
       const result = await engine.run("test");
@@ -246,46 +282,23 @@ describe("OpenCodeEngine", () => {
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
       expect(result.output).toContain("Error occurred");
-
-      spy.mockRestore();
-    });
-
-    test("combines stdout and stderr in output", async () => {
-      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
-        status: 0,
-        stdout: "stdout content",
-        stderr: "stderr content",
-        pid: 1,
-        output: [],
-        signal: null,
-      });
-
-      const engine = new OpenCodeEngine();
-      const result = await engine.run("test");
-
-      expect(result.output).toContain("stdout content");
-      expect(result.output).toContain("stderr content");
-
-      spy.mockRestore();
     });
 
     test("handles null status as exit code 1", async () => {
-      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
-        status: null,
-        stdout: "",
-        stderr: "",
-        pid: 1,
-        output: [],
-        signal: "SIGTERM",
-      });
+      const mockChild = createMockChild([]);
+      spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
+        mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+      );
 
       const engine = new OpenCodeEngine();
-      const result = await engine.run("test");
+      const resultPromise = engine.run("test");
+
+      mockChild.emit("close", null);
+
+      const result = await resultPromise;
 
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
-
-      spy.mockRestore();
     });
   });
 });

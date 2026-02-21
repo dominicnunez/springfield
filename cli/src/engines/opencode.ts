@@ -1,4 +1,5 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 import { logWarning } from "../ui/logger.js";
 import type { Engine, EngineResult } from "./base.js";
 
@@ -38,6 +39,7 @@ export class OpenCodeEngine implements Engine {
   }
 
   isAvailable(): boolean {
+    const { spawnSync } = require("node:child_process");
     const result = spawnSync("which", ["opencode"], { encoding: "utf-8" });
     return result.status === 0;
   }
@@ -45,36 +47,84 @@ export class OpenCodeEngine implements Engine {
   async run(prompt: string): Promise<EngineResult> {
     const args = ["run", "--model", this.model, prompt];
 
-    const result = spawnSync("opencode", args, {
-      encoding: "utf-8",
-      cwd: process.cwd(),
-      stdio: ["inherit", "pipe", "pipe"],
-      maxBuffer: 50 * 1024 * 1024, // 50MB buffer
+    return new Promise<EngineResult>((resolve) => {
+      const child = spawn("opencode", args, {
+        cwd: process.cwd(),
+        stdio: ["inherit", "pipe", "pipe"],
+      });
+
+      let output = "";
+      let stderr = "";
+      let killed = false;
+
+      const killChild = () => {
+        if (!killed) {
+          killed = true;
+          child.kill("SIGTERM");
+          setTimeout(() => {
+            try {
+              child.kill("SIGKILL");
+            } catch {}
+          }, 5000);
+        }
+      };
+
+      if (!child.stdout) {
+        resolve({
+          success: false,
+          output: "Failed to spawn opencode: no stdout",
+          exitCode: 1,
+          rateLimited: false,
+        });
+        return;
+      }
+
+      const rl = createInterface({ input: child.stdout });
+
+      rl.on("line", (line) => {
+        process.stdout.write(`${line}\n`);
+        output += `${line}\n`;
+      });
+
+      child.stderr?.on("data", (chunk: Buffer) => {
+        const text = chunk.toString();
+        stderr += text;
+        process.stderr.write(text);
+      });
+
+      child.on("close", (code) => {
+        rl.close();
+
+        const combined = output + stderr;
+        const hardRateLimited = this.isHardRateLimited(combined);
+        const softRateLimited =
+          !hardRateLimited && this.isSoftRateLimited(combined);
+        const rateLimited = hardRateLimited || softRateLimited;
+
+        resolve({
+          success: code === 0,
+          output: output || stderr,
+          exitCode: code ?? 1,
+          rateLimited,
+          hardRateLimited,
+          softRateLimited,
+        });
+      });
+
+      const safetyTimeout = setTimeout(
+        () => {
+          process.stderr.write(
+            "\n[sfk] Safety timeout reached (45 min), killing OpenCode process\n",
+          );
+          killChild();
+        },
+        45 * 60 * 1000,
+      );
+
+      child.on("close", () => {
+        clearTimeout(safetyTimeout);
+      });
     });
-
-    const output = (result.stdout || "") + (result.stderr || "");
-
-    // Stream output to console
-    if (result.stdout) {
-      process.stdout.write(result.stdout);
-    }
-    if (result.stderr) {
-      process.stderr.write(result.stderr);
-    }
-
-    // Check for rate limiting (hard vs soft)
-    const hardRateLimited = this.isHardRateLimited(output);
-    const softRateLimited = !hardRateLimited && this.isSoftRateLimited(output);
-    const rateLimited = hardRateLimited || softRateLimited;
-
-    return {
-      success: result.status === 0,
-      output,
-      exitCode: result.status ?? 1,
-      rateLimited,
-      hardRateLimited,
-      softRateLimited,
-    };
   }
 
   /**
