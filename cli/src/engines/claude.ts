@@ -2,9 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { EffortLevel } from "../config/loader.js";
 import type { Engine, EngineResult } from "./base.js";
-import { SAFETY_TIMEOUT_MS } from "./opencode.js";
-
-const SIGKILL_DELAY_MS = 5000;
+import { SAFETY_TIMEOUT_MS, SIGKILL_DELAY_MS } from "./constants.js";
 
 export class ClaudeEngine implements Engine {
   name = "claude";
@@ -147,11 +145,10 @@ export class ClaudeEngine implements Engine {
         });
       });
 
-      // Safety timeout: 45 minutes max per step
       const safetyTimeout = setTimeout(() => {
         if (!resultEvent) {
           process.stderr.write(
-            "\n[sfk] Safety timeout reached (45 min), killing Claude process\n",
+            `\n[sfk] Safety timeout reached (${SAFETY_TIMEOUT_MS / 60000} min), killing Claude process\n`,
           );
           killChild();
         }

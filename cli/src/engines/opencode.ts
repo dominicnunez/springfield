@@ -3,9 +3,7 @@ import { createInterface } from "node:readline";
 import { DEFAULT_OC_PRIME_MODEL } from "../config/loader.js";
 import { logWarning } from "../ui/logger.js";
 import type { Engine, EngineResult } from "./base.js";
-
-export const SAFETY_TIMEOUT_MS = 45 * 60 * 1000;
-const SIGKILL_DELAY_MS = 5000;
+import { SAFETY_TIMEOUT_MS, SIGKILL_DELAY_MS } from "./constants.js";
 
 interface OpenCodeEvent {
   type: string;
@@ -195,7 +193,7 @@ export class OpenCodeEngine implements Engine {
 
       const safetyTimeout = setTimeout(() => {
         process.stderr.write(
-          "\n[sfk] Safety timeout reached (45 min), killing OpenCode process\n",
+          `\n[sfk] Safety timeout reached (${SAFETY_TIMEOUT_MS / 60000} min), killing OpenCode process\n`,
         );
         killChild();
       }, SAFETY_TIMEOUT_MS);
