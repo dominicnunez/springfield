@@ -16,7 +16,7 @@ type = opencode
 [models]
 claude = sonnet
 claude-effort = high
-opencode-primary = opencode/glm-5-free
+opencode-primary = big-pickle
 # opencode-fallback =
 
 [rate-limits]

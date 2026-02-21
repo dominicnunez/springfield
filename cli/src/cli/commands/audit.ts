@@ -20,7 +20,7 @@ import {
 } from "../../engines/base.js";
 import { ClaudeEngine } from "../../engines/claude.js";
 import { OpenCodeEngine } from "../../engines/opencode.js";
-import { logError, logInfo, logSuccess, logWarning } from "../../ui/logger.js";
+import { logDebug, logError, logInfo, logSuccess, logWarning } from "../../ui/logger.js";
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -81,7 +81,7 @@ function notify(message: string): void {
       });
     }
   } catch (err) {
-    logInfo(`Notification failed: ${err}`);
+    logDebug(`Notification failed: ${err}`);
   }
 }
 
@@ -120,7 +120,11 @@ function logToFile(
   output: string,
 ): void {
   const logFile = join(logDir, `iter${iter}-${step}.log`);
-  appendFileSync(logFile, output);
+  try {
+    appendFileSync(logFile, output);
+  } catch (err) {
+    logWarning(`Failed to write log to ${logFile}: ${err}`);
+  }
 }
 
 interface ResolvedPrompt {

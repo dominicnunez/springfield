@@ -162,7 +162,7 @@ export function mergeOptions(config: Config, cliOptions: CliOptions): Config {
     merged.engine = cliOptions.engine;
   }
 
-  if (cliOptions.model) {
+  if (cliOptions.model !== undefined) {
     if (merged.engine === "claude") {
       merged.claudeModel = cliOptions.model;
     } else {

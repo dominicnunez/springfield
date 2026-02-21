@@ -20,6 +20,8 @@ export interface Engine {
 
 export const COMPLETE_MARKER = "<promise>COMPLETE</promise>";
 
+const FIX_TESTS_PROMPT_MAX_LINES = 100;
+
 const COMMIT_STANDARD = `## Commit Message Standard
 
 Use conventional commits. Lowercase type, imperative mood, concise subject line.
@@ -230,7 +232,7 @@ export function generateFixTestsPrompt(options: FixTestsPromptOptions): string {
   const { testOutput, skipCommit, progressFile } = options;
 
   const lines = testOutput.split("\n");
-  const truncatedOutput = lines.slice(-100).join("\n");
+  const truncatedOutput = lines.slice(-FIX_TESTS_PROMPT_MAX_LINES).join("\n");
 
   const commitInstructions = skipCommit
     ? `- If tests PASS:

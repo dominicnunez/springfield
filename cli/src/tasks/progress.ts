@@ -7,6 +7,8 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+const MAX_TEST_OUTPUT_LINES = 50;
+
 export interface IterationResult {
   iteration: number;
   taskName: string;
@@ -23,7 +25,8 @@ export function getProgressFile(
   projectName: string,
   progressDir: string,
 ): string {
-  return join(progressDir, `progress-${projectName}.log`);
+  const sanitized = projectName.replace(/[^a-zA-Z0-9-_]/g, "_");
+  return join(progressDir, `progress-${sanitized}.log`);
 }
 
 /**
@@ -74,11 +77,10 @@ export function appendFailure(
   }
 
   if (testOutput) {
-    // Truncate test output to last 50 lines
     const outputLines = testOutput.split("\n");
-    const truncated = outputLines.slice(-50).join("\n");
+    const truncated = outputLines.slice(-MAX_TEST_OUTPUT_LINES).join("\n");
     lines.push("");
-    lines.push("### Test Output (last 50 lines):");
+    lines.push(`### Test Output (last ${MAX_TEST_OUTPUT_LINES} lines):`);
     lines.push("```");
     lines.push(truncated);
     lines.push("```");
@@ -125,13 +127,20 @@ function formatProgressEntry(result: IterationResult): string {
  * Initialize progress directory and file if they don't exist
  */
 export function initProgress(progressDir: string, progressFile: string): void {
-  // Create directory if it doesn't exist
-  if (!existsSync(progressDir)) {
-    mkdirSync(progressDir, { recursive: true });
+  if (!progressDir || !progressFile) {
+    console.error("[PROGRESS ERROR] progressDir and progressFile must be provided");
+    return;
   }
 
-  // Create file if it doesn't exist
-  if (!existsSync(progressFile)) {
-    writeFileSync(progressFile, "# Progress Log\n\n");
+  try {
+    if (!existsSync(progressDir)) {
+      mkdirSync(progressDir, { recursive: true });
+    }
+
+    if (!existsSync(progressFile)) {
+      writeFileSync(progressFile, "# Progress Log\n\n");
+    }
+  } catch (err) {
+    console.error(`[PROGRESS ERROR] Failed to initialize progress: ${err}`);
   }
 }

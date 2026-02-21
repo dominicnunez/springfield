@@ -116,7 +116,10 @@ export function parseConfigFile(content: string): Record<string, string> {
     }
 
     const eqIndex = trimmed.indexOf("=");
-    if (eqIndex === -1) continue;
+    if (eqIndex === -1) {
+      logWarning(`Skipping malformed config line: ${line}`);
+      continue;
+    }
 
     const key = trimmed.slice(0, eqIndex).trim();
     let value = trimmed.slice(eqIndex + 1).trim();
@@ -268,9 +271,19 @@ export function applyConfigToConfig(
 
   // [logging]
   if (parsed["logging.log-dir"]?.trim())
-    config.logDir = parsed["logging.log-dir"];
+    config.logDir = validatePath(parsed["logging.log-dir"], "log-dir");
   if (parsed["logging.progress-dir"]?.trim())
-    config.progressDir = parsed["logging.progress-dir"];
+    config.progressDir = validatePath(parsed["logging.progress-dir"], "progress-dir");
+}
+
+function validatePath(path: string, name: string): string {
+  const resolved = path.replace(/^~/, homedir());
+  const absolute = resolved.startsWith("/") ? resolved : join(process.cwd(), resolved);
+  if (absolute.startsWith(homedir()) || absolute.startsWith("/tmp/") || absolute === "/tmp") {
+    return path;
+  }
+  logWarning(`${name} path "${path}" escapes allowed directories, using default`);
+  return "";
 }
 
 /**
@@ -308,9 +321,9 @@ function applyEnvToConfig(config: Config, env: Record<string, string>): void {
       env.MAX_CONSECUTIVE_FAILURES,
       3,
     );
-  if (env.RALPH_LOG_DIR?.trim()) config.logDir = env.RALPH_LOG_DIR;
+  if (env.RALPH_LOG_DIR?.trim()) config.logDir = validatePath(env.RALPH_LOG_DIR, "log-dir");
   if (env.RALPH_PROGRESS_DIR?.trim())
-    config.progressDir = env.RALPH_PROGRESS_DIR;
+    config.progressDir = validatePath(env.RALPH_PROGRESS_DIR, "progress-dir");
 }
 
 /**
@@ -482,6 +495,13 @@ export function loadConfig(): Config {
 
   applyEnvToConfig(config, processEnv);
 
+  if (!config.logDir) {
+    config.logDir = join(homedir(), ".sfk", "logs");
+  }
+  if (!config.progressDir) {
+    config.progressDir = join(homedir(), ".sfk", "progress");
+  }
+
   return config;
 }
 
@@ -499,7 +519,10 @@ export function getRalphModel(config: Config): string {
   if (config.engine === "claude") {
     return config.ralphModel ?? config.claudeModel;
   }
-  return config.ocPrimeModel;
+  if (config.engine === "opencode") {
+    return config.ocPrimeModel;
+  }
+  return config.ralphModel ?? config.claudeModel ?? config.ocPrimeModel;
 }
 
 /**

@@ -2,8 +2,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { EffortLevel } from "../config/loader.js";
 import type { Engine, EngineResult } from "./base.js";
+import { SAFETY_TIMEOUT_MS } from "./opencode.js";
 
-const SAFETY_TIMEOUT_MS = 45 * 60 * 1000;
 const SIGKILL_DELAY_MS = 5000;
 
 export class ClaudeEngine implements Engine {

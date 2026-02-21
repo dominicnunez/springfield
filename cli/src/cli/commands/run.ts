@@ -41,6 +41,8 @@ import {
   logWarning,
 } from "../../ui/logger.js";
 
+const EXPONENTIAL_BACKOFF_MULTIPLIER = 2;
+
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
@@ -60,7 +62,7 @@ async function handleSoftRateLimit(
     return false;
   }
 
-  const waitTime = baseWait * 2 ** attempt;
+  const waitTime = baseWait * EXPONENTIAL_BACKOFF_MULTIPLIER ** attempt;
 
   console.log("");
   console.log(
@@ -128,7 +130,7 @@ function pushAfterCommit(headBefore: string): void {
     logInfo("Push successful");
     console.log(`  Pushed to origin/${branch}`);
   } else {
-    logWarning("Push failed (will retry next iteration)");
+    logWarning(`Push failed: ${pushResult.stderr || "unknown error"} (will retry next iteration)`);
     console.log("  Push failed (will retry next iteration)");
   }
 }

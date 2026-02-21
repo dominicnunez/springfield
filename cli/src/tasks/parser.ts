@@ -1,4 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { logWarning } from "../ui/logger.js";
+
+const PRD_TASK_PATTERN = /^\s*-\s*\[([ xX])\]\s*(.+)$/;
 
 export interface Task {
   text: string;
@@ -22,8 +25,7 @@ export function parsePrd(prdPath: string): Task[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Match task format: - [ ] text or - [x] text (with optional leading whitespace)
-    const match = line.match(/^\s*-\s*\[([ xX])\]\s*(.+)$/);
+    const match = line.match(PRD_TASK_PATTERN);
     if (match) {
       const completed = match[1].toLowerCase() === "x";
       const text = match[2].trim();
@@ -68,13 +70,16 @@ export function markTaskComplete(prdPath: string, task: Task): void {
     return;
   }
 
-  const content = readFileSync(prdPath, "utf-8");
-  const lines = content.split("\n");
+  try {
+    const content = readFileSync(prdPath, "utf-8");
+    const lines = content.split("\n");
 
-  // Replace [ ] with [x] on the task's line
-  if (task.lineNumber < lines.length) {
-    lines[task.lineNumber] = lines[task.lineNumber].replace(/\[\s\]/, "[x]");
-    writeFileSync(prdPath, lines.join("\n"));
+    if (task.lineNumber < lines.length) {
+      lines[task.lineNumber] = lines[task.lineNumber].replace(/\[\s\]/, "[x]");
+      writeFileSync(prdPath, lines.join("\n"));
+    }
+  } catch (err) {
+    logWarning(`Failed to mark task complete in ${prdPath}: ${err}`);
   }
 }
 

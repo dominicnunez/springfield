@@ -4,9 +4,9 @@ import { logWarning, printDivider } from "../ui/logger.js";
 
 // Test file patterns
 const TEST_FILE_PATTERNS = [
-  /\.(test|spec)\.(ts|js|tsx|jsx|py)$/,
-  /_test\.(go|py)$/,
-  /test_.*\.py$/,
+  /\.(test|spec)\.(ts|js|tsx|jsx|py)$/i,
+  /_test\.(go|py)$/i,
+  /test_.*\.py$/i,
 ];
 
 export interface TestResult {
@@ -173,6 +173,17 @@ export function runTests(testCmd: string): TestResult {
     cwd: process.cwd(),
     stdio: ["inherit", "pipe", "pipe"],
   });
+
+  if (result.error) {
+    const errorMsg = `Test command not found: ${cmd}`;
+    console.log(errorMsg);
+    printDivider();
+    return {
+      passed: false,
+      output: errorMsg,
+      exitCode: 1,
+    };
+  }
 
   const output = (result.stdout || "") + (result.stderr || "");
   console.log(output);

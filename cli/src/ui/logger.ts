@@ -2,6 +2,8 @@ import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import pc from "picocolors";
 
+const DEFAULT_MAX_LOG_LINES = 50;
+
 export interface LoggerOptions {
   logFile?: string;
   verbose?: boolean;
@@ -17,7 +19,14 @@ export function initLogger(options: LoggerOptions = {}): void {
   if (logFilePath) {
     const dir = dirname(logFilePath);
     if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
+      try {
+        mkdirSync(dir, { recursive: true });
+      } catch (err) {
+        console.error(
+          `[LOG ERROR] Failed to create log directory ${dir}: ${err}`,
+        );
+        logFilePath = undefined;
+      }
     }
   }
 }
@@ -111,7 +120,7 @@ export function logSessionStart(
   }
 }
 
-export function logAiOutput(output: string, truncateLines = 50): void {
+export function logAiOutput(output: string, truncateLines = DEFAULT_MAX_LOG_LINES): void {
   if (!logFilePath) return;
 
   const lines = output.split("\n");

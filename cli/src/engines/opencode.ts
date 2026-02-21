@@ -4,7 +4,7 @@ import { DEFAULT_OC_PRIME_MODEL } from "../config/loader.js";
 import { logWarning } from "../ui/logger.js";
 import type { Engine, EngineResult } from "./base.js";
 
-const SAFETY_TIMEOUT_MS = 45 * 60 * 1000;
+export const SAFETY_TIMEOUT_MS = 45 * 60 * 1000;
 const SIGKILL_DELAY_MS = 5000;
 
 interface OpenCodeEvent {
@@ -98,6 +98,9 @@ export class OpenCodeEngine implements Engine {
           if (event.type === "text" && event.part?.text) {
             process.stdout.write(event.part.text);
             output += event.part.text;
+          } else if (event.type === "text") {
+            process.stdout.write(`${line}\n`);
+            output += `${line}\n`;
           }
 
           if (event.type === "error" && event.error) {
