@@ -139,6 +139,13 @@
 
 <!-- Findings where the audit misread the code or described behavior that doesn't occur -->
 
+### Regex patterns not pre-compiled
+
+**Location:** `cli/src/tasks/verification.ts:6`
+**Date:** 2026-02-21
+
+**Reason:** The TEST_FILE_PATTERNS array is already declared with `const` on line 6. The audit claimed it "could be explicitly marked as constant with const" but the keyword was already present.
+
 ### Dead reference to non-existent config.example
 
 **Location:** `cli/src/config/loader:324` — warning message references config.example
@@ -160,3 +167,24 @@
 ## Intentional Design Decisions
 
 <!-- Findings that describe behavior which is correct by design -->
+
+### Empty config values are trimmed and ignored
+
+**Location:** `cli/src/config/loader.ts:204-205, 241-242` — config value parsing
+**Date:** 2026-02-21
+
+**Reason:** Empty strings (including whitespace-only) are intentionally treated as "not set". This prevents accidental empty values in config files from causing issues. Users who want to explicitly set a value to empty should use appropriate placeholder values or remove the key entirely.
+
+### Race condition in getChangedTestFiles
+
+**Location:** `cli/src/tasks/verification.ts:91-134`
+**Date:** 2026-02-21
+
+**Reason:** The function runs three separate git commands sequentially (unstaged, staged, lastCommit). While theoretically a race condition exists, the practical risk is low since the window between commands is tiny. Fixing would require either a single combined git command or taking a snapshot at the start, which adds complexity without proportional benefit. The current approach balances correctness with simplicity.
+
+### Signal handlers don't kill child processes
+
+**Location:** `cli/src/cli/commands/run.ts:235-236`
+**Date:** 2026-02-21
+
+**Reason:** The signal handlers set interrupted=true but don't kill the engine child process. Fixing this requires returning the child process handle from engine.run() and storing it globally, which is a significant architectural change to the Engine interface. The practical impact is minimal since the OS will clean up orphaned processes on exit.
