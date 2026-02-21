@@ -5,6 +5,8 @@ import { join } from "node:path";
 export type EngineType = "opencode" | "claude";
 export type EffortLevel = "high" | "medium" | "low";
 
+export const DEFAULT_OC_PRIME_MODEL = "big-pickle";
+
 export interface Config {
   // Engine
   engine: EngineType;
@@ -106,7 +108,7 @@ export function parseConfigFile(content: string): Record<string, string> {
     if (!trimmed || trimmed.startsWith("#")) continue;
 
     // Section header
-    const sectionMatch = trimmed.match(/^\[([a-z-]+)\]$/);
+    const sectionMatch = trimmed.match(/^\[([a-zA-Z-]+)\]$/);
     if (sectionMatch) {
       currentSection = sectionMatch[1];
       continue;
@@ -163,9 +165,14 @@ function parseEnvFile(content: string): Record<string, string> {
 }
 
 function parseBool(value: string): boolean | undefined {
-  if (value === "true" || value === "1") return true;
-  if (value === "false" || value === "0") return false;
+  if (value === "true") return true;
+  if (value === "false") return false;
   return undefined;
+}
+
+function parseIntSafe(value: string, defaultVal: number): number {
+  const parsed = parseInt(value, 10);
+  return Number.isNaN(parsed) ? defaultVal : parsed;
 }
 
 function parseEffort(value: string): EffortLevel | undefined {
@@ -199,15 +206,18 @@ export function applyConfigToConfig(
 
   // [rate-limits]
   if (parsed["rate-limits.soft-retries"])
-    config.softLimitRetries = parseInt(parsed["rate-limits.soft-retries"], 10);
+    config.softLimitRetries = parseIntSafe(
+      parsed["rate-limits.soft-retries"],
+      3,
+    );
   if (parsed["rate-limits.soft-wait"])
-    config.softLimitWait = parseInt(parsed["rate-limits.soft-wait"], 10);
+    config.softLimitWait = parseIntSafe(parsed["rate-limits.soft-wait"], 30);
 
   // [ralph]
   if (parsed["ralph.max-iterations"])
-    config.maxIterations = parseInt(parsed["ralph.max-iterations"], 10);
+    config.maxIterations = parseIntSafe(parsed["ralph.max-iterations"], 10);
   if (parsed["ralph.sleep-seconds"])
-    config.sleepSeconds = parseInt(parsed["ralph.sleep-seconds"], 10);
+    config.sleepSeconds = parseIntSafe(parsed["ralph.sleep-seconds"], 2);
   const skipCommit = parsed["ralph.skip-commit"];
   if (skipCommit !== undefined) {
     const val = parseBool(skipCommit);
@@ -224,9 +234,9 @@ export function applyConfigToConfig(
     if (val !== undefined) config.skipTestVerify = val;
   }
   if (parsed["ralph.max-consecutive-failures"])
-    config.maxConsecutiveFailures = parseInt(
+    config.maxConsecutiveFailures = parseIntSafe(
       parsed["ralph.max-consecutive-failures"],
-      10,
+      3,
     );
   if (parsed["ralph.test-cmd"]?.trim())
     config.testCmd = parsed["ralph.test-cmd"];
@@ -243,7 +253,10 @@ export function applyConfigToConfig(
 
   // [willie]
   if (parsed["willie.max-iterations"])
-    config.willieMaxIterations = parseInt(parsed["willie.max-iterations"], 10);
+    config.willieMaxIterations = parseIntSafe(
+      parsed["willie.max-iterations"],
+      0,
+    );
   if (parsed["willie.audit-prompt"]?.trim())
     config.willieAuditPrompt = parsed["willie.audit-prompt"];
   if (parsed["willie.model"]) config.willieModel = parsed["willie.model"];
@@ -266,8 +279,9 @@ function applyEnvToConfig(config: Config, env: Record<string, string>): void {
   if (env.ENGINE === "claude" || env.ENGINE === "opencode")
     config.engine = env.ENGINE;
   if (env.MAX_ITERATIONS)
-    config.maxIterations = parseInt(env.MAX_ITERATIONS, 10);
-  if (env.SLEEP_SECONDS) config.sleepSeconds = parseInt(env.SLEEP_SECONDS, 10);
+    config.maxIterations = parseIntSafe(env.MAX_ITERATIONS, 10);
+  if (env.SLEEP_SECONDS)
+    config.sleepSeconds = parseIntSafe(env.SLEEP_SECONDS, 2);
   if (env.SKIP_COMMIT !== undefined) {
     const val = parseBool(env.SKIP_COMMIT);
     if (val !== undefined) config.skipCommit = val;
@@ -280,16 +294,19 @@ function applyEnvToConfig(config: Config, env: Record<string, string>): void {
   if (env.OC_PRIME_MODEL) config.ocPrimeModel = env.OC_PRIME_MODEL;
   if (env.OC_FALL_MODEL?.trim()) config.ocFallModel = env.OC_FALL_MODEL;
   if (env.SOFT_LIMIT_RETRIES)
-    config.softLimitRetries = parseInt(env.SOFT_LIMIT_RETRIES, 10);
+    config.softLimitRetries = parseIntSafe(env.SOFT_LIMIT_RETRIES, 3);
   if (env.SOFT_LIMIT_WAIT)
-    config.softLimitWait = parseInt(env.SOFT_LIMIT_WAIT, 10);
+    config.softLimitWait = parseIntSafe(env.SOFT_LIMIT_WAIT, 30);
   if (env.TEST_CMD?.trim()) config.testCmd = env.TEST_CMD;
   if (env.SKIP_TEST_VERIFY !== undefined) {
     const val = parseBool(env.SKIP_TEST_VERIFY);
     if (val !== undefined) config.skipTestVerify = val;
   }
   if (env.MAX_CONSECUTIVE_FAILURES)
-    config.maxConsecutiveFailures = parseInt(env.MAX_CONSECUTIVE_FAILURES, 10);
+    config.maxConsecutiveFailures = parseIntSafe(
+      env.MAX_CONSECUTIVE_FAILURES,
+      3,
+    );
   if (env.RALPH_LOG_DIR?.trim()) config.logDir = env.RALPH_LOG_DIR;
   if (env.RALPH_PROGRESS_DIR?.trim())
     config.progressDir = env.RALPH_PROGRESS_DIR;
@@ -333,7 +350,7 @@ function defaultConfig(): Config {
     engine: "opencode",
     claudeModel: "sonnet",
     claudeEffort: "high",
-    ocPrimeModel: "big-pickle",
+    ocPrimeModel: DEFAULT_OC_PRIME_MODEL,
     ocFallModel: undefined,
     softLimitRetries: 3,
     softLimitWait: 30,
