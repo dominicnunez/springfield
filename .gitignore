@@ -54,3 +54,16 @@ ralphoc-test.log
 
 # Claude
 .claude/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
+coverage.out
+coverage.html
