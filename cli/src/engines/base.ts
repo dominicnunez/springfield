@@ -299,8 +299,12 @@ After fixing and tests pass, check PRD.md:
 export const DEFAULT_AUDIT_PROMPT = `Audit this codebase for security vulnerabilities, bugs, performance issues, and code quality problems.
 
 Rules:
-1. Read the project structure and key source files thoroughly
-2. Check for: injection flaws, auth issues, data exposure, misconfigurations, error handling gaps, race conditions, resource leaks, logic errors, misleading comments, dead code/config, magic numbers that should be named constants, missing error context at package boundaries, and testing problems (see rule 7)
+1. Read the project entrypoints and follow imports to understand structure. Read test files to identify what is and isn't covered.
+2. Check for problems in these areas:
+   - **Security:** injection flaws, auth issues, data exposure, missing input validation
+   - **Correctness:** logic errors, race conditions, error handling gaps, missing error context at package boundaries
+   - **Maintainability:** misleading comments, dead code/config, magic numbers that should be named constants, misconfigurations
+   - **Testing:** see rule 7
 3. Check audit/exceptions.md — do not re-flag items already listed there
 4. Include ALL real findings regardless of fix difficulty — small fixes (wrong comments, dead config, missing constants) are valid findings. The fix step decides effort, not the audit step.
 5. Write findings to audit/report.md. You MUST use the write tool. Use this EXACT format for each finding:
@@ -315,7 +319,11 @@ Categories: Security, Bug, Performance, Code Quality, Error Handling, Configurat
 
 The format is critical: "### [Category]" with brackets, then severity/file/details/fix on separate lines.
 6. If no issues found, do not create audit/report.md
-7. Check tests for: untested critical paths (error branches, edge cases, security-sensitive logic), cruft tests that test implementation details instead of behavior (e.g. mocking internals, asserting on log output, snapshot tests of serialization formats), tests that pass but verify nothing meaningful (empty assertions, tautologies, tests that duplicate other tests verbatim), and stale tests that reference removed or renamed code`;
+7. Check tests for:
+   - Untested error handling, security boundaries, and data validation (not every uncovered branch — focus on paths where a bug would cause real damage)
+   - Cruft tests that test implementation details instead of behavior (mocking internals, asserting on log output, snapshot tests of serialization formats)
+   - Tests that pass but verify nothing meaningful (empty assertions, tautologies, verbatim duplicates of other tests)
+   - Stale tests that reference removed or renamed code`;
 
 export const VALIDATE_PROMPT = `Review and validate or invalidate each item in audit/report.md. Be thorough — actually read the code at every referenced file:line. Do not just trust the audit description.
 
@@ -338,9 +346,31 @@ Rules:
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
 6. Remove invalidated items from audit/report.md
 7. If ALL items are invalidated, delete audit/report.md entirely
-8. Do not reference finding IDs or category labels in commit messages`;
+8. Do not reference finding IDs or category labels in commit messages
+9. For testing findings (missing coverage, cruft tests), verify the claim by reading the test files — confirm the gap actually exists or the test actually has the described problem. Do not rubber-stamp testing findings.`;
 
-export const FIX_PROMPT = `Fix the issues in audit/report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to audit/exceptions.md.
+export interface FixPromptOptions {
+  testCmd: string | undefined;
+  lintCmd: string | undefined;
+}
+
+export function generateFixPrompt(options: FixPromptOptions): string {
+  const { testCmd, lintCmd } = options;
+
+  let verifyInstructions: string;
+  if (testCmd && lintCmd) {
+    verifyInstructions = `7. Before pushing, run lint and tests. Fix any failures your changes introduced. Do not push with lint warnings or test failures.
+   - Lint: \`${lintCmd}\`
+   - Test: \`${testCmd}\``;
+  } else if (testCmd) {
+    verifyInstructions = `7. Before pushing, run tests: \`${testCmd}\`. Fix any failures your changes introduced. Do not push with test failures. No lint command detected — skip linting.`;
+  } else if (lintCmd) {
+    verifyInstructions = `7. Before pushing, run lint: \`${lintCmd}\`. Fix any failures your changes introduced. Do not push with lint warnings. No test command detected — skip testing.`;
+  } else {
+    verifyInstructions = `7. No lint or test command detected — skip verification. If you know how to run them for this project, do so manually.`;
+  }
+
+  return `Fix the issues in audit/report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to audit/exceptions.md.
 
 Rules:
 1. Do proper long-term fixes, not quick-fix bandaids
@@ -367,7 +397,8 @@ Rules:
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
 5. Commit each fix following the commit standard below.
 6. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
-7. Before pushing, run the project's lint and test commands. Fix any failures your changes introduced. Do not push with lint warnings or test failures.
+${verifyInstructions}
 8. Delete audit/report.md when 100% resolved and push
 
 ${COMMIT_STANDARD}`;
+}
