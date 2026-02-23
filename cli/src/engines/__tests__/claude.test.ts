@@ -1,15 +1,8 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import * as childProcess from "node:child_process";
 import { EventEmitter } from "node:events";
-import { createRequire } from "node:module";
 import { Readable } from "node:stream";
 import { ClaudeEngine } from "../claude.js";
-
-// The engine uses require("node:child_process") inside isAvailable(), so we need
-// the CJS module reference (same cached object) for spies to take effect there.
-const cjsChildProcess = createRequire(import.meta.url)(
-  "node:child_process",
-) as typeof childProcess;
 
 // ──────────────────────────────────────────────────────────────
 // Helpers
@@ -127,7 +120,7 @@ describe("ClaudeEngine", () => {
   // the CJS module object (same cached instance) rather than the ESM namespace.
   describe("isAvailable", () => {
     test("returns true when claude is in PATH", () => {
-      const spy = spyOn(cjsChildProcess, "spawnSync").mockReturnValue({
+      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
         status: 0,
         stdout: "/usr/bin/claude\n",
         stderr: "",
@@ -142,7 +135,7 @@ describe("ClaudeEngine", () => {
     });
 
     test("returns false when claude is not in PATH", () => {
-      const spy = spyOn(cjsChildProcess, "spawnSync").mockReturnValue({
+      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
         status: 1,
         stdout: "",
         stderr: "",
@@ -157,7 +150,7 @@ describe("ClaudeEngine", () => {
     });
 
     test("returns false when spawnSync throws", () => {
-      const spy = spyOn(cjsChildProcess, "spawnSync").mockImplementation(() => {
+      const spy = spyOn(childProcess, "spawnSync").mockImplementation(() => {
         throw new Error("ENOENT: no such file or directory");
       });
 

@@ -1,13 +1,8 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import * as childProcess from "node:child_process";
 import { EventEmitter } from "node:events";
-import { createRequire } from "node:module";
 import { Readable } from "node:stream";
 import { OpenCodeEngine } from "../opencode.js";
-
-const cjsChildProcess = createRequire(import.meta.url)(
-  "node:child_process",
-) as typeof childProcess;
 
 function textEvent(text: string): string {
   return JSON.stringify({
@@ -137,7 +132,7 @@ describe("OpenCodeEngine", () => {
 
   describe("isAvailable", () => {
     test("returns true when opencode is in PATH", () => {
-      const spy = spyOn(cjsChildProcess, "spawnSync").mockReturnValue({
+      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
         status: 0,
         stdout: "/usr/bin/opencode",
         stderr: "",
@@ -156,7 +151,7 @@ describe("OpenCodeEngine", () => {
     });
 
     test("returns false when opencode is not in PATH", () => {
-      const spy = spyOn(cjsChildProcess, "spawnSync").mockReturnValue({
+      const spy = spyOn(childProcess, "spawnSync").mockReturnValue({
         status: 1,
         stdout: "",
         stderr: "",

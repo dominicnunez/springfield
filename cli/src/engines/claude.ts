@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import * as childProcess from "node:child_process";
 import { createInterface } from "node:readline";
 import type { EffortLevel } from "../config/loader.js";
 import type { Engine, EngineResult } from "./base.js";
@@ -16,7 +16,9 @@ export class ClaudeEngine implements Engine {
 
   isAvailable(): boolean {
     try {
-      const result = spawnSync("which", ["claude"], { encoding: "utf-8" });
+      const result = childProcess.spawnSync("which", ["claude"], {
+        encoding: "utf-8",
+      });
       return result.status === 0;
     } catch {
       return false;
@@ -37,7 +39,7 @@ export class ClaudeEngine implements Engine {
     ];
 
     return new Promise<EngineResult>((resolve) => {
-      const child = spawn("claude", args, {
+      const child = childProcess.spawn("claude", args, {
         cwd: process.cwd(),
         stdio: ["ignore", "pipe", "pipe"],
       });

@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import * as childProcess from "node:child_process";
 import { createInterface } from "node:readline";
 import { DEFAULT_OC_PRIME_MODEL } from "../config/loader.js";
 import { logWarning } from "../ui/logger.js";
@@ -42,7 +42,9 @@ export class OpenCodeEngine implements Engine {
   }
 
   isAvailable(): boolean {
-    const result = spawnSync("which", ["opencode"], { encoding: "utf-8" });
+    const result = childProcess.spawnSync("which", ["opencode"], {
+      encoding: "utf-8",
+    });
     return result.status === 0;
   }
 
@@ -50,7 +52,7 @@ export class OpenCodeEngine implements Engine {
     const args = ["run", "--format", "json", "--model", this.model, prompt];
 
     return new Promise<EngineResult>((resolve) => {
-      const child = spawn("opencode", args, {
+      const child = childProcess.spawn("opencode", args, {
         cwd: process.cwd(),
         stdio: ["inherit", "pipe", "pipe"],
       });
