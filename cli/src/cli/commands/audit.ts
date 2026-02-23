@@ -15,11 +15,15 @@ import { getWillieEffort, getWillieModel } from "../../config/loader.js";
 import {
   DEFAULT_AUDIT_PROMPT,
   type Engine,
-  FIX_PROMPT,
+  generateFixPrompt,
   VALIDATE_PROMPT,
 } from "../../engines/base.js";
 import { ClaudeEngine } from "../../engines/claude.js";
 import { OpenCodeEngine } from "../../engines/opencode.js";
+import {
+  detectLintCommand,
+  detectTestCommand,
+} from "../../tasks/verification.js";
 import {
   logDebug,
   logError,
@@ -38,6 +42,7 @@ export interface AuditOptions {
   startStep: AuditStep;
   maxIterations: number; // 0 = unlimited
   auditPromptPath: string | undefined;
+  lintCmd: string | undefined;
   verbose?: boolean;
 }
 
@@ -236,6 +241,7 @@ async function runValidateStep(
 
 async function runFixStep(
   engine: Engine,
+  fixPrompt: string,
   logDir: string,
   iter: number,
 ): Promise<void> {
@@ -248,7 +254,7 @@ async function runFixStep(
   logInfo("STEP 3: Fixing issues...");
   console.log(pc.cyan("  Step 3: Fix"));
 
-  const result = await engine.run(FIX_PROMPT);
+  const result = await engine.run(fixPrompt);
   logToFile(logDir, iter, "fix", result.output);
 
   if (!result.success) {
@@ -305,6 +311,11 @@ export async function auditLoop(
   const resolved = resolveAuditPrompt(options.auditPromptPath);
   const auditPrompt = resolved.text;
 
+  // Resolve lint and test commands
+  const lintCmd = options.lintCmd ?? config.lintCmd ?? detectLintCommand();
+  const testCmd = config.testCmd ?? detectTestCommand();
+  const fixPrompt = generateFixPrompt({ testCmd, lintCmd });
+
   // Ensure audit/ directory and exceptions template exist
   ensureAuditDir();
 
@@ -318,6 +329,8 @@ export async function auditLoop(
   console.log(`  Max iterations: ${maxStr}`);
   console.log(`  Model: ${model} (effort: ${effort})`);
   console.log(`  Audit prompt: ${resolved.source}`);
+  console.log(`  Lint command: ${lintCmd ?? "none detected"}`);
+  console.log(`  Test command: ${testCmd ?? "none detected"}`);
   console.log("");
 
   let iter = 0;
@@ -361,15 +374,15 @@ export async function auditLoop(
             break;
           }
           await runValidateStep(engine, logDir, iter);
-          await runFixStep(engine, logDir, iter);
+          await runFixStep(engine, fixPrompt, logDir, iter);
           continue;
         }
         case "validate":
           await runValidateStep(engine, logDir, iter);
-          await runFixStep(engine, logDir, iter);
+          await runFixStep(engine, fixPrompt, logDir, iter);
           continue;
         case "fix":
-          await runFixStep(engine, logDir, iter);
+          await runFixStep(engine, fixPrompt, logDir, iter);
           continue;
       }
 
@@ -389,7 +402,7 @@ export async function auditLoop(
         break;
       }
       await runValidateStep(engine, logDir, iter);
-      await runFixStep(engine, logDir, iter);
+      await runFixStep(engine, fixPrompt, logDir, iter);
     }
   }
 

@@ -24,6 +24,7 @@ export interface AuditCliOptions {
   startStep?: AuditStep;
   maxIterations?: number;
   auditPrompt?: string;
+  lintCmd?: string;
   verbose?: boolean;
 }
 
@@ -123,6 +124,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
       parseInt,
     )
     .option("--audit-prompt <path>", "Path to custom audit prompt file")
+    .option("--lint-cmd <cmd>", "Custom lint command for fix step")
     .option("-v, --verbose", "Enable verbose output")
     .action((opts) => {
       resolvedCommand = "audit";
@@ -138,6 +140,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
         startStep: step,
         maxIterations: opts.maxIterations,
         auditPrompt: opts.auditPrompt,
+        lintCmd: opts.lintCmd,
         verbose: opts.verbose,
       });
     });

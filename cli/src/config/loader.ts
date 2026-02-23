@@ -38,6 +38,7 @@ export interface Config {
   willieAuditPrompt: string | undefined;
   willieModel: string | undefined;
   willieEffort: EffortLevel | undefined;
+  lintCmd: string | undefined;
 
   // Logging
   logDir: string;
@@ -88,6 +89,7 @@ max-consecutive-failures = 3
 [willie]
 max-iterations = 0
 # audit-prompt = audit/prompt.md
+# lint-cmd =
 # effort = high
 
 [logging]
@@ -262,6 +264,8 @@ export function applyConfigToConfig(
     );
   if (parsed["willie.audit-prompt"]?.trim())
     config.willieAuditPrompt = parsed["willie.audit-prompt"];
+  if (parsed["willie.lint-cmd"]?.trim())
+    config.lintCmd = parsed["willie.lint-cmd"];
   if (parsed["willie.model"]) config.willieModel = parsed["willie.model"];
   if (parsed["willie.effort"]) {
     const effort = parseEffort(parsed["willie.effort"]);
@@ -394,6 +398,7 @@ function defaultConfig(): Config {
     willieAuditPrompt: undefined,
     willieModel: undefined,
     willieEffort: undefined,
+    lintCmd: undefined,
     logDir: join(homedir(), ".sfk", "logs"),
     progressDir: join(homedir(), ".sfk", "progress"),
     auditAfterComplete: false,

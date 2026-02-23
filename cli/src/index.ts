@@ -18,6 +18,7 @@ async function main(): Promise<void> {
           auditOptions.maxIterations ?? finalConfig.willieMaxIterations,
         auditPromptPath:
           auditOptions.auditPrompt ?? finalConfig.willieAuditPrompt,
+        lintCmd: auditOptions.lintCmd,
         verbose: auditOptions.verbose,
       });
       return;
