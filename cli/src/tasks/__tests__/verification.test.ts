@@ -239,8 +239,8 @@ describe("tasks/verification", () => {
     test("skips verification when no test command provided", () => {
       const result = verify(undefined);
 
-      expect(result.testsWritten).toBe(true);
-      expect(result.testsPassed).toBe(true);
+      expect(result.testsWritten).toBe(false);
+      expect(result.testsPassed).toBe(false);
     });
 
     test("reports testsWritten=false when no test files changed", () => {

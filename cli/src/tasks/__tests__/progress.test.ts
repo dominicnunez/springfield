@@ -28,9 +28,11 @@ describe("tasks/progress", () => {
   });
 
   describe("getProgressFile", () => {
-    test("constructs correct path", () => {
+    test("constructs correct path with sanitized name and hash", () => {
       const result = getProgressFile("my-app", "/home/user/.ralph/progress");
-      expect(result).toBe("/home/user/.ralph/progress/progress-my-app.log");
+      expect(result).toMatch(
+        /^\/home\/user\/\.ralph\/progress\/progress-my_app-[0-9a-f]{6}\.log$/,
+      );
     });
   });
 
