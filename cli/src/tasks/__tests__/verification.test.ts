@@ -4,6 +4,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  detectLintCommand,
+  detectPackageManager,
   detectTestCommand,
   getChangedTestFiles,
   verify,
@@ -232,6 +234,127 @@ describe("tasks/verification", () => {
 
       const files = getChangedTestFiles();
       expect(files).toEqual([]);
+    });
+  });
+
+  describe("detectPackageManager", () => {
+    test("returns npm when no lockfile exists", () => {
+      expect(detectPackageManager()).toBe("npm");
+    });
+
+    test("returns bun when bun.lockb exists", () => {
+      writeFileSync(join(tempDir, "bun.lockb"), "");
+      expect(detectPackageManager()).toBe("bun");
+    });
+
+    test("returns pnpm when pnpm-lock.yaml exists", () => {
+      writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
+      expect(detectPackageManager()).toBe("pnpm");
+    });
+
+    test("returns yarn when yarn.lock exists", () => {
+      writeFileSync(join(tempDir, "yarn.lock"), "");
+      expect(detectPackageManager()).toBe("yarn");
+    });
+  });
+
+  describe("detectLintCommand", () => {
+    test("returns undefined when no config files exist", () => {
+      expect(detectLintCommand()).toBeUndefined();
+    });
+
+    test("detects lint script from package.json with npm", () => {
+      writeFileSync(
+        join(tempDir, "package.json"),
+        JSON.stringify({ scripts: { lint: "eslint ." } }),
+      );
+      expect(detectLintCommand()).toBe("npm run lint");
+    });
+
+    test("detects lint script from package.json with bun", () => {
+      writeFileSync(
+        join(tempDir, "package.json"),
+        JSON.stringify({ scripts: { lint: "eslint ." } }),
+      );
+      writeFileSync(join(tempDir, "bun.lockb"), "");
+      expect(detectLintCommand()).toBe("bun run lint");
+    });
+
+    test("detects lint script from package.json with pnpm", () => {
+      writeFileSync(
+        join(tempDir, "package.json"),
+        JSON.stringify({ scripts: { lint: "eslint ." } }),
+      );
+      writeFileSync(join(tempDir, "pnpm-lock.yaml"), "");
+      expect(detectLintCommand()).toBe("pnpm run lint");
+    });
+
+    test("detects lint script from package.json with yarn", () => {
+      writeFileSync(
+        join(tempDir, "package.json"),
+        JSON.stringify({ scripts: { lint: "eslint ." } }),
+      );
+      writeFileSync(join(tempDir, "yarn.lock"), "");
+      expect(detectLintCommand()).toBe("yarn run lint");
+    });
+
+    test("detects biome from biome.json", () => {
+      writeFileSync(join(tempDir, "biome.json"), "{}");
+      expect(detectLintCommand()).toBe("npx biome check .");
+    });
+
+    test("detects biome from biome.jsonc", () => {
+      writeFileSync(join(tempDir, "biome.jsonc"), "{}");
+      expect(detectLintCommand()).toBe("npx biome check .");
+    });
+
+    test("detects eslint from eslint.config.js", () => {
+      writeFileSync(join(tempDir, "eslint.config.js"), "module.exports = {}");
+      expect(detectLintCommand()).toBe("npx eslint .");
+    });
+
+    test("detects eslint from .eslintrc.json", () => {
+      writeFileSync(join(tempDir, ".eslintrc.json"), "{}");
+      expect(detectLintCommand()).toBe("npx eslint .");
+    });
+
+    test("detects golangci-lint when go.mod and .golangci.yml both exist", () => {
+      writeFileSync(join(tempDir, "go.mod"), "module example.com/test");
+      writeFileSync(join(tempDir, ".golangci.yml"), "linters:");
+      expect(detectLintCommand()).toBe("golangci-lint run");
+    });
+
+    test("returns undefined for go.mod without .golangci.yml", () => {
+      writeFileSync(join(tempDir, "go.mod"), "module example.com/test");
+      expect(detectLintCommand()).toBeUndefined();
+    });
+
+    test("detects cargo clippy from Cargo.toml", () => {
+      writeFileSync(join(tempDir, "Cargo.toml"), "[package]");
+      expect(detectLintCommand()).toBe("cargo clippy");
+    });
+
+    test("package.json lint script takes precedence over config files", () => {
+      writeFileSync(
+        join(tempDir, "package.json"),
+        JSON.stringify({ scripts: { lint: "custom-lint" } }),
+      );
+      writeFileSync(join(tempDir, "biome.json"), "{}");
+      writeFileSync(join(tempDir, "eslint.config.js"), "module.exports = {}");
+      expect(detectLintCommand()).toBe("npm run lint");
+    });
+
+    test("returns undefined for package.json without lint script", () => {
+      writeFileSync(
+        join(tempDir, "package.json"),
+        JSON.stringify({ scripts: { build: "tsc" } }),
+      );
+      expect(detectLintCommand()).toBeUndefined();
+    });
+
+    test("handles malformed package.json gracefully", () => {
+      writeFileSync(join(tempDir, "package.json"), "not valid json");
+      expect(detectLintCommand()).toBeUndefined();
     });
   });
 

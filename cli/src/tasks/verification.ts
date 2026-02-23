@@ -22,30 +22,46 @@ export interface VerificationResult {
   testOutput?: string;
 }
 
+type PackageManager = "bun" | "pnpm" | "yarn" | "npm";
+
+/**
+ * Detect which package manager the project uses based on lockfiles
+ */
+export function detectPackageManager(): PackageManager {
+  if (existsSync("bun.lockb")) return "bun";
+  if (existsSync("pnpm-lock.yaml")) return "pnpm";
+  if (existsSync("yarn.lock")) return "yarn";
+  return "npm";
+}
+
+/**
+ * Check package.json for a script and return the PM-specific run command.
+ * Special-cases "test" since all PMs support it as a first-class command.
+ */
+export function detectPackageScript(
+  scriptName: string,
+): string | undefined {
+  if (!existsSync("package.json")) return undefined;
+
+  try {
+    const content = readFileSync("package.json", "utf-8");
+    const pkg = JSON.parse(content);
+    if (!pkg.scripts?.[scriptName]) return undefined;
+
+    const pm = detectPackageManager();
+    if (scriptName === "test") return `${pm} test`;
+    return `${pm} run ${scriptName}`;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Auto-detect test command based on project files
  */
 export function detectTestCommand(): string | undefined {
-  // Check package.json for test script
-  if (existsSync("package.json")) {
-    try {
-      const content = readFileSync("package.json", "utf-8");
-      const pkg = JSON.parse(content);
-      if (pkg.scripts?.test) {
-        // Detect package manager
-        if (existsSync("bun.lockb")) {
-          return "bun test";
-        } else if (existsSync("pnpm-lock.yaml")) {
-          return "pnpm test";
-        } else if (existsSync("yarn.lock")) {
-          return "yarn test";
-        }
-        return "npm test";
-      }
-    } catch {
-      // Ignore parse errors
-    }
-  }
+  const fromPkg = detectPackageScript("test");
+  if (fromPkg) return fromPkg;
 
   // Check for common test config files
   if (existsSync("vitest.config.ts") || existsSync("vitest.config.js")) {
@@ -69,6 +85,46 @@ export function detectTestCommand(): string | undefined {
   // Rust
   if (existsSync("Cargo.toml")) {
     return "cargo test";
+  }
+
+  return undefined;
+}
+
+/**
+ * Auto-detect lint command based on project files
+ */
+export function detectLintCommand(): string | undefined {
+  const fromPkg = detectPackageScript("lint");
+  if (fromPkg) return fromPkg;
+
+  // Biome
+  if (existsSync("biome.json") || existsSync("biome.jsonc")) {
+    return "npx biome check .";
+  }
+
+  // ESLint (flat config and legacy)
+  const eslintConfigs = [
+    "eslint.config.js",
+    "eslint.config.mjs",
+    "eslint.config.cjs",
+    ".eslintrc.js",
+    ".eslintrc.cjs",
+    ".eslintrc.json",
+    ".eslintrc.yml",
+    ".eslintrc.yaml",
+  ];
+  if (eslintConfigs.some((f) => existsSync(f))) {
+    return "npx eslint .";
+  }
+
+  // Go (only if golangci-lint config exists alongside go.mod)
+  if (existsSync("go.mod") && existsSync(".golangci.yml")) {
+    return "golangci-lint run";
+  }
+
+  // Rust
+  if (existsSync("Cargo.toml")) {
+    return "cargo clippy";
   }
 
   return undefined;
