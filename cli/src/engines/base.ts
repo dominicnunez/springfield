@@ -300,7 +300,7 @@ export const DEFAULT_AUDIT_PROMPT = `Audit this codebase for security vulnerabil
 
 Rules:
 1. Read the project structure and key source files thoroughly
-2. Check for: injection flaws, auth issues, data exposure, misconfigurations, error handling gaps, race conditions, resource leaks, logic errors, misleading comments, dead code/config, magic numbers that should be named constants, and missing error context at package boundaries
+2. Check for: injection flaws, auth issues, data exposure, misconfigurations, error handling gaps, race conditions, resource leaks, logic errors, misleading comments, dead code/config, magic numbers that should be named constants, missing error context at package boundaries, and testing problems (see rule 7)
 3. Check audit/exceptions.md — do not re-flag items already listed there
 4. Include ALL real findings regardless of fix difficulty — small fixes (wrong comments, dead config, missing constants) are valid findings. The fix step decides effort, not the audit step.
 5. Write findings to audit/report.md. You MUST use the write tool. Use this EXACT format for each finding:
@@ -311,10 +311,11 @@ Rules:
 - **Details**: Password is hardcoded instead of using environment variables
 - **Suggested fix**: Load from environment variable using os.Getenv
 
-Categories: Security, Bug, Performance, Code Quality, Error Handling, Configuration
+Categories: Security, Bug, Performance, Code Quality, Error Handling, Configuration, Testing
 
 The format is critical: "### [Category]" with brackets, then severity/file/details/fix on separate lines.
-6. If no issues found, do not create audit/report.md`;
+6. If no issues found, do not create audit/report.md
+7. Check tests for: untested critical paths (error branches, edge cases, security-sensitive logic), cruft tests that test implementation details instead of behavior (e.g. mocking internals, asserting on log output, snapshot tests of serialization formats), tests that pass but verify nothing meaningful (empty assertions, tautologies, tests that duplicate other tests verbatim), and stale tests that reference removed or renamed code`;
 
 export const VALIDATE_PROMPT = `Review and validate or invalidate each item in audit/report.md. Be thorough — actually read the code at every referenced file:line. Do not just trust the audit description.
 
@@ -366,6 +367,7 @@ Rules:
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
 5. Commit each fix following the commit standard below.
 6. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
-7. Delete audit/report.md when 100% resolved and push
+7. Before pushing, run the project's lint and test commands. Fix any failures your changes introduced. Do not push with lint warnings or test failures.
+8. Delete audit/report.md when 100% resolved and push
 
 ${COMMIT_STANDARD}`;
