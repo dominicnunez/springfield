@@ -151,7 +151,10 @@ function parseExceptionsFile(content: string): SectionEntries[] {
     }
 
     // Skip HTML comments and blank-only lines at section start
-    if (line.match(/^\s*<!--.*-->\s*$/) || (buffer.length === 0 && !line.trim())) {
+    if (
+      line.match(/^\s*<!--.*-->\s*$/) ||
+      (buffer.length === 0 && !line.trim())
+    ) {
       continue;
     }
 
@@ -202,9 +205,7 @@ ${ENTRY_FORMAT}
 
 export function migrateExceptions(): void {
   if (!existsSync(OLD_EXCEPTIONS_FILE)) {
-    logError(
-      `${OLD_EXCEPTIONS_FILE} not found — nothing to migrate.`,
-    );
+    logError(`${OLD_EXCEPTIONS_FILE} not found — nothing to migrate.`);
     process.exitCode = 1;
     return;
   }
@@ -244,8 +245,7 @@ export function migrateExceptions(): void {
 
     let fileContent = TEMPLATES[target];
     if (entries.length > 0) {
-      fileContent +=
-        "\n" + entries.map((e) => e.formatted).join("\n\n") + "\n";
+      fileContent += `\n${entries.map((e) => e.formatted).join("\n\n")}\n`;
     }
 
     writeFileSync(join(EXCEPTIONS_DIR, target), fileContent);
@@ -253,7 +253,8 @@ export function migrateExceptions(): void {
 
   unlinkSync(OLD_EXCEPTIONS_FILE);
 
-  const total = counts["misreads.md"] + counts["risks.md"] + counts["design.md"];
+  const total =
+    counts["misreads.md"] + counts["risks.md"] + counts["design.md"];
   logSuccess(`Migrated ${total} entries from ${OLD_EXCEPTIONS_FILE}:`);
   logInfo(`  misreads.md: ${counts["misreads.md"]} entries`);
   logInfo(`  risks.md:    ${counts["risks.md"]} entries`);

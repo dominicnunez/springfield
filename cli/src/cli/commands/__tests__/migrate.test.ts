@@ -95,7 +95,10 @@ describe("migrateExceptions", () => {
 
   const sectionMappingCases = [
     { header: "False Positives", target: "misreads.md" },
-    { header: "Audit False Positives (Invalidated Findings)", target: "misreads.md" },
+    {
+      header: "Audit False Positives (Invalidated Findings)",
+      target: "misreads.md",
+    },
     { header: "Won't Fix", target: "risks.md" },
     { header: "Accepted / Won't Fix", target: "risks.md" },
     { header: "Audit Won't-Fix (Accepted)", target: "risks.md" },
