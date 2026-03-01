@@ -4,7 +4,7 @@ import type { Config, EngineType } from "../config/loader.js";
 import { VERSION } from "../version.js";
 import type { AuditStep } from "./commands/audit.js";
 
-export type CommandType = "run" | "audit" | "migrate";
+export type CommandType = "run" | "audit" | "migrate" | "prune";
 
 export interface CliOptions {
   engine?: EngineType;
@@ -28,10 +28,15 @@ export interface AuditCliOptions {
   verbose?: boolean;
 }
 
+export interface PruneCliOptions {
+  verbose?: boolean;
+}
+
 export interface ParsedArgs {
   command: CommandType;
   options: CliOptions;
   auditOptions: AuditCliOptions;
+  pruneOptions: PruneCliOptions;
 }
 
 function isDirectory(path: string): boolean {
@@ -48,6 +53,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   let resolvedCommand: CommandType = "run";
   const cliOptions: CliOptions = {};
   const auditCliOptions: AuditCliOptions = {};
+  const pruneCliOptions: PruneCliOptions = {};
 
   program
     .name("sfk")
@@ -152,12 +158,24 @@ export function parseArgs(argv: string[]): ParsedArgs {
       resolvedCommand = "migrate";
     });
 
+  program
+    .command("prune")
+    .description("Remove stale entries from audit/exceptions/ files")
+    .option("-v, --verbose", "Enable verbose output")
+    .action((opts) => {
+      resolvedCommand = "prune";
+      Object.assign(pruneCliOptions, {
+        verbose: opts.verbose,
+      });
+    });
+
   program.parse(argv);
 
   return {
     command: resolvedCommand,
     options: cliOptions,
     auditOptions: auditCliOptions,
+    pruneOptions: pruneCliOptions,
   };
 }
 
