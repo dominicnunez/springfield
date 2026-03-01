@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { mergeOptions, parseArgs } from "./cli/args.js";
 import { auditLoop } from "./cli/commands/audit.js";
+import { migrateExceptions } from "./cli/commands/migrate.js";
 import { runLoop, runSingleTask } from "./cli/commands/run.js";
 import { loadConfig } from "./config/loader.js";
 import { logError } from "./ui/logger.js";
@@ -10,6 +11,11 @@ async function main(): Promise<void> {
     const { command, options, auditOptions } = parseArgs(process.argv);
     const config = loadConfig();
     const finalConfig = mergeOptions(config, options);
+
+    if (command === "migrate") {
+      migrateExceptions();
+      return;
+    }
 
     if (command === "audit") {
       await auditLoop(finalConfig, {
