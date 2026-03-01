@@ -139,6 +139,13 @@ export function logAiOutput(
   }
 }
 
+export function formatDivider(text: string, width = 40): string {
+  const padding = Math.max(0, width - text.length - 2);
+  const left = Math.floor(padding / 2);
+  const right = Math.ceil(padding / 2);
+  return `${"=".repeat(left)} ${text} ${"=".repeat(right)}`;
+}
+
 // Formatted output helpers
 export function printHeader(text: string): void {
   console.log(pc.bold(pc.cyan(text)));
