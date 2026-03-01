@@ -17,6 +17,7 @@ import {
 } from "../../engines/base.js";
 import { ClaudeEngine } from "../../engines/claude.js";
 import { OpenCodeEngine } from "../../engines/opencode.js";
+import { handleSoftRateLimit } from "../../engines/rate-limit.js";
 import {
   allTasksComplete,
   countIncompleteTasks,
@@ -41,46 +42,12 @@ import {
   logWarning,
 } from "../../ui/logger.js";
 
-const EXPONENTIAL_BACKOFF_MULTIPLIER = 2;
-
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
 
 function sleep(seconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
-}
-
-async function handleSoftRateLimit(
-  attempt: number,
-  maxRetries: number,
-  baseWait: number,
-): Promise<boolean> {
-  if (attempt >= maxRetries) {
-    logWarning(`Soft rate limit: exhausted ${maxRetries} retries`);
-    console.log(`  Soft rate limit persisted after ${maxRetries} retries`);
-    return false;
-  }
-
-  const waitTime = baseWait * EXPONENTIAL_BACKOFF_MULTIPLIER ** attempt;
-
-  console.log("");
-  console.log(
-    "───────────────────────────────────────────────────────────────",
-  );
-  console.log(
-    `  Soft rate limit detected (attempt ${attempt + 1}/${maxRetries})`,
-  );
-  console.log(`  Waiting ${waitTime}s before retry...`);
-  console.log(
-    "───────────────────────────────────────────────────────────────",
-  );
-  logInfo(
-    `Soft rate limit: waiting ${waitTime}s (attempt ${attempt + 1}/${maxRetries})`,
-  );
-
-  await sleep(waitTime);
-  return true;
 }
 
 function notify(message: string): void {

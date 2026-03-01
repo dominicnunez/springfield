@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -15,11 +16,13 @@ import { getWillieEffort, getWillieModel } from "../../config/loader.js";
 import {
   DEFAULT_AUDIT_PROMPT,
   type Engine,
+  type EngineResult,
   generateFixPrompt,
   VALIDATE_PROMPT,
 } from "../../engines/base.js";
 import { ClaudeEngine } from "../../engines/claude.js";
 import { OpenCodeEngine } from "../../engines/opencode.js";
+import { handleSoftRateLimit } from "../../engines/rate-limit.js";
 import {
   detectLintCommand,
   detectTestCommand,
@@ -52,30 +55,34 @@ export interface AuditOptions {
 
 const AUDIT_DIR = "audit";
 const REPORT_FILE = join(AUDIT_DIR, "report.md");
-const EXCEPTIONS_FILE = join(AUDIT_DIR, "exceptions.md");
+const EXCEPTIONS_DIR = join(AUDIT_DIR, "exceptions");
 
-const EXCEPTIONS_TEMPLATE = `# Audit Exceptions
-
-> Items validated as false positives or accepted as won't-fix.
-> Managed by willie audit loop. Do not edit format manually.
->
+const ENTRY_FORMAT = `>
 > Entry format:
 > ### Plain language description
 > **Location:** \`file/path:line\` — optional context
 > **Date:** YYYY-MM-DD
-> **Reason:** Explanation (can be multiple lines)
+> **Reason:** Explanation (can be multiple lines)`;
 
-## False Positives
+const MISREADS_TEMPLATE = `# Misreads
 
-<!-- Findings where the audit misread the code or described behavior that doesn't occur -->
+> Findings where the audit misread the code or described behavior that doesn't occur.
+> Managed by sfk willie. Follow the entry format below.
+${ENTRY_FORMAT}
+`;
 
-## Won't Fix
+const RISKS_TEMPLATE = `# Risks
 
-<!-- Real findings not worth fixing — architectural cost, external constraints, etc. -->
+> Real findings consciously accepted — architectural cost, external constraints, disproportionate effort.
+> Managed by sfk willie. Follow the entry format below.
+${ENTRY_FORMAT}
+`;
 
-## Intentional Design Decisions
+const DESIGN_TEMPLATE = `# Design
 
-<!-- Findings that describe behavior which is correct by design -->
+> Findings that describe behavior which is correct by design.
+> Managed by sfk willie. Follow the entry format below.
+${ENTRY_FORMAT}
 `;
 
 // ─────────────────────────────────────────────────────────────
@@ -118,10 +125,31 @@ function ensureAuditDir(): void {
   if (!existsSync(AUDIT_DIR)) {
     mkdirSync(AUDIT_DIR, { recursive: true });
   }
-  if (!existsSync(EXCEPTIONS_FILE)) {
-    writeFileSync(EXCEPTIONS_FILE, EXCEPTIONS_TEMPLATE);
-    logInfo("Created audit/exceptions.md template");
+  if (!existsSync(EXCEPTIONS_DIR)) {
+    mkdirSync(EXCEPTIONS_DIR, { recursive: true });
+    writeFileSync(join(EXCEPTIONS_DIR, "misreads.md"), MISREADS_TEMPLATE);
+    writeFileSync(join(EXCEPTIONS_DIR, "risks.md"), RISKS_TEMPLATE);
+    writeFileSync(join(EXCEPTIONS_DIR, "design.md"), DESIGN_TEMPLATE);
+    logInfo("Created audit/exceptions/ with template files");
   }
+}
+
+function readExceptions(): string {
+  if (!existsSync(EXCEPTIONS_DIR)) return "";
+
+  const files = readdirSync(EXCEPTIONS_DIR)
+    .filter((f) => f.endsWith(".md"))
+    .sort();
+
+  if (files.length === 0) return "";
+
+  const parts: string[] = [];
+  for (const file of files) {
+    const content = readFileSync(join(EXCEPTIONS_DIR, file), "utf-8").trim();
+    if (content) parts.push(content);
+  }
+
+  return parts.join("\n\n");
 }
 
 function logToFile(
@@ -173,17 +201,30 @@ function resolveAuditPrompt(
 // Steps
 // ─────────────────────────────────────────────────────────────
 
+type AuditStepResult = "continue" | "stop" | "rate-limited";
+type StepResult = "ok" | "rate-limited";
+
+function checkRateLimited(result: EngineResult): boolean {
+  return !!(result.softRateLimited || result.hardRateLimited);
+}
+
 async function runAuditStep(
   engine: Engine,
   auditPrompt: string,
   logDir: string,
   iter: number,
-): Promise<boolean> {
+): Promise<AuditStepResult> {
   logInfo("STEP 1: Running audit...");
-  console.log(pc.cyan("  Step 1: Audit"));
 
-  const result = await engine.run(auditPrompt);
+  const exceptions = readExceptions();
+  const fullPrompt = exceptions
+    ? `${auditPrompt}\n\n--- KNOWN EXCEPTIONS (do not re-flag) ---\n${exceptions}\n--- END KNOWN EXCEPTIONS ---`
+    : auditPrompt;
+
+  const result = await engine.run(fullPrompt);
   logToFile(logDir, iter, "audit", result.output);
+
+  if (checkRateLimited(result)) return "rate-limited";
 
   if (!result.success) {
     logWarning(`Claude exited with code ${result.exitCode} for audit step`);
@@ -191,33 +232,31 @@ async function runAuditStep(
 
   if (!existsSync(REPORT_FILE)) {
     logSuccess("No audit/report.md generated — codebase is clean!");
-    console.log(pc.green("  No findings — codebase is clean!"));
-    return false; // signal to stop
+    return "stop";
   }
 
   const findingCount = countFindings(REPORT_FILE);
   if (findingCount === 0) {
     logSuccess("Audit report has no findings. Cleaning up.");
-    console.log(pc.green("  Audit report empty. Cleaning up."));
     unlinkSync(REPORT_FILE);
-    return false; // signal to stop
+    return "stop";
   }
 
   logInfo(`Audit found ${findingCount} issue(s).`);
-  console.log(`  Found ${findingCount} issue(s)`);
-  return true; // continue
+  return "continue";
 }
 
 async function runValidateStep(
   engine: Engine,
   logDir: string,
   iter: number,
-): Promise<void> {
+): Promise<StepResult> {
   logInfo("STEP 2: Validating findings...");
-  console.log(pc.cyan("  Step 2: Validate"));
 
   const result = await engine.run(VALIDATE_PROMPT);
   logToFile(logDir, iter, "validate", result.output);
+
+  if (checkRateLimited(result)) return "rate-limited";
 
   if (!result.success) {
     logWarning(`Claude exited with code ${result.exitCode} for validate step`);
@@ -225,18 +264,18 @@ async function runValidateStep(
 
   if (!existsSync(REPORT_FILE)) {
     logInfo("All findings were false positives.");
-    console.log("  All findings were false positives");
-    return;
+    return "ok";
   }
 
   const remaining = countFindings(REPORT_FILE);
   logInfo(`${remaining} validated finding(s) remain.`);
-  console.log(`  ${remaining} validated finding(s) remain`);
 
   if (remaining === 0) {
     unlinkSync(REPORT_FILE);
     logInfo("Report empty after validation.");
   }
+
+  return "ok";
 }
 
 async function runFixStep(
@@ -244,33 +283,33 @@ async function runFixStep(
   fixPrompt: string,
   logDir: string,
   iter: number,
-): Promise<void> {
+): Promise<StepResult> {
   if (!existsSync(REPORT_FILE)) {
     logInfo("No audit report to fix. Skipping step 3.");
-    console.log("  No report to fix, skipping");
-    return;
+    return "ok";
   }
 
   logInfo("STEP 3: Fixing issues...");
-  console.log(pc.cyan("  Step 3: Fix"));
 
   const result = await engine.run(fixPrompt);
   logToFile(logDir, iter, "fix", result.output);
+
+  if (checkRateLimited(result)) return "rate-limited";
 
   if (!result.success) {
     logWarning(`Claude exited with code ${result.exitCode} for fix step`);
   }
 
   if (!existsSync(REPORT_FILE)) {
-    logInfo("All issues resolved.");
-    console.log("  All issues resolved");
+    logSuccess("All issues resolved.");
   } else {
     const remaining = countFindings(REPORT_FILE);
     if (remaining > 0) {
       logWarning(`${remaining} finding(s) remain after fix step.`);
-      console.log(pc.yellow(`  ${remaining} finding(s) remain after fix`));
     }
   }
+
+  return "ok";
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -335,17 +374,37 @@ export async function auditLoop(
 
   let iter = 0;
   let firstIter = true;
+  let softLimitRetries = 0;
+
+  async function handleRateLimit(): Promise<boolean> {
+    if (
+      await handleSoftRateLimit(
+        softLimitRetries,
+        config.softLimitRetries,
+        config.softLimitWait,
+      )
+    ) {
+      softLimitRetries++;
+      iter--;
+      return true;
+    }
+
+    softLimitRetries = 0;
+    if (engine.switchToFallback?.()) {
+      iter--;
+      return true;
+    }
+
+    logError("Rate limit persisted, no fallback available");
+    process.exitCode = 1;
+    return false;
+  }
 
   while (true) {
     iter++;
 
     if (options.maxIterations > 0 && iter > options.maxIterations) {
       logInfo(`Reached max iterations (${options.maxIterations}). Stopping.`);
-      console.log(
-        pc.yellow(
-          `  Reached max iterations (${options.maxIterations}). Stopping.`,
-        ),
-      );
       notify(
         `Willie: reached iteration cap (${options.maxIterations}) on ${projectName}. NOT converged — issues may remain.`,
       );
@@ -361,48 +420,100 @@ export async function auditLoop(
 
       switch (options.startStep) {
         case "audit": {
-          const shouldContinue = await runAuditStep(
+          const auditResult = await runAuditStep(
             engine,
             auditPrompt,
             logDir,
             iter,
           );
-          if (!shouldContinue) {
+          if (auditResult === "rate-limited") {
+            if (await handleRateLimit()) continue;
+            return;
+          }
+          if (auditResult === "stop") {
             notify(
               `Willie: codebase clean after ${iter} iteration(s) on ${projectName}. No findings.`,
             );
             break;
           }
-          await runValidateStep(engine, logDir, iter);
-          await runFixStep(engine, fixPrompt, logDir, iter);
+          softLimitRetries = 0;
+
+          const valResult = await runValidateStep(engine, logDir, iter);
+          if (valResult === "rate-limited") {
+            if (await handleRateLimit()) continue;
+            return;
+          }
+          softLimitRetries = 0;
+
+          const fixResult = await runFixStep(engine, fixPrompt, logDir, iter);
+          if (fixResult === "rate-limited") {
+            if (await handleRateLimit()) continue;
+            return;
+          }
+          softLimitRetries = 0;
           continue;
         }
-        case "validate":
-          await runValidateStep(engine, logDir, iter);
-          await runFixStep(engine, fixPrompt, logDir, iter);
+        case "validate": {
+          const valResult = await runValidateStep(engine, logDir, iter);
+          if (valResult === "rate-limited") {
+            if (await handleRateLimit()) continue;
+            return;
+          }
+          softLimitRetries = 0;
+
+          const fixResult = await runFixStep(engine, fixPrompt, logDir, iter);
+          if (fixResult === "rate-limited") {
+            if (await handleRateLimit()) continue;
+            return;
+          }
+          softLimitRetries = 0;
           continue;
-        case "fix":
-          await runFixStep(engine, fixPrompt, logDir, iter);
+        }
+        case "fix": {
+          const fixResult = await runFixStep(engine, fixPrompt, logDir, iter);
+          if (fixResult === "rate-limited") {
+            if (await handleRateLimit()) continue;
+            return;
+          }
+          softLimitRetries = 0;
           continue;
+        }
       }
 
-      // If audit step returned false (clean), we break above
+      // If audit step returned "stop" (clean), we break above
       if (options.startStep === "audit") break;
     } else {
-      const shouldContinue = await runAuditStep(
+      const auditResult = await runAuditStep(
         engine,
         auditPrompt,
         logDir,
         iter,
       );
-      if (!shouldContinue) {
+      if (auditResult === "rate-limited") {
+        if (await handleRateLimit()) continue;
+        return;
+      }
+      if (auditResult === "stop") {
         notify(
           `Willie: codebase clean after ${iter} iteration(s) on ${projectName}. No findings.`,
         );
         break;
       }
-      await runValidateStep(engine, logDir, iter);
-      await runFixStep(engine, fixPrompt, logDir, iter);
+      softLimitRetries = 0;
+
+      const valResult = await runValidateStep(engine, logDir, iter);
+      if (valResult === "rate-limited") {
+        if (await handleRateLimit()) continue;
+        return;
+      }
+      softLimitRetries = 0;
+
+      const fixResult = await runFixStep(engine, fixPrompt, logDir, iter);
+      if (fixResult === "rate-limited") {
+        if (await handleRateLimit()) continue;
+        return;
+      }
+      softLimitRetries = 0;
     }
   }
 

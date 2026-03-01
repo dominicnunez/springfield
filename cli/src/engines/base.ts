@@ -305,7 +305,7 @@ Rules:
    - **Correctness:** logic errors, race conditions, error handling gaps, missing error context at package boundaries
    - **Maintainability:** misleading comments, dead code/config, magic numbers that should be named constants, misconfigurations
    - **Testing:** see rule 7
-3. Check audit/exceptions.md — do not re-flag items already listed there
+3. Known exceptions are appended to this prompt — do not re-flag them
 4. Include ALL real findings regardless of fix difficulty — small fixes (wrong comments, dead config, missing constants) are valid findings. The fix step decides effort, not the audit step.
 5. Write findings to audit/report.md. You MUST use the write tool. Use this EXACT format for each finding:
 
@@ -332,7 +332,7 @@ Rules:
 2. Determine if the finding is FACTUALLY WRONG (false positive) or REAL
 3. A finding is a false positive ONLY if the audit misread the code, missed existing handling, or described behavior that doesn't actually occur
 4. A finding that is real but "minor" or "easy to fix" is NOT a false positive — keep it in the report
-5. Move only genuine false positives to the "False Positives" section of audit/exceptions.md using this exact format:
+5. Move only genuine false positives to audit/exceptions/misreads.md using this exact format:
 
 \`\`\`
 ### Plain language description of the finding
@@ -375,11 +375,11 @@ export function generateFixPrompt(options: FixPromptOptions): string {
 Rules:
 1. Do proper long-term fixes, not quick-fix bandaids
 2. **Fix-effort rule:** If a finding can be fixed in the current session (wrong comments, missing constants, dead config, incomplete test coverage, trivial code cleanup), FIX IT. Do not punt easy fixes to exceptions.
-3. Only move items to the "Won't Fix" section of audit/exceptions.md when ALL of these are true:
+3. Only move items to audit/exceptions/ when ALL of these are true:
    - The finding requires architectural changes disproportionate to its severity, OR
    - There is a genuine design tradeoff where the current approach is defensible, OR
    - The finding is about external constraints you cannot change (transitive deps, upstream bugs)
-4. When adding to exceptions, use the correct section and this exact format:
+4. When adding to exceptions, append to the correct file using this format:
 
 \`\`\`
 ### Plain language description of the finding
@@ -390,10 +390,11 @@ Rules:
 **Reason:** Why this is excepted. Can be multiple lines.
 \`\`\`
 
-   Sections:
-   - "False Positives" — finding was factually wrong (should have been caught in validate step)
-   - "Won't Fix" — finding is real but genuinely not worth fixing
-   - "Intentional Design Decisions" — finding describes behavior that is correct by design
+   Files in audit/exceptions/:
+   - risks.md — finding is real but genuinely not worth fixing
+   - misreads.md — finding was factually wrong (should have been caught in validate step)
+   - design.md — finding describes behavior that is correct by design
+   Agents can create additional domain-specific files in the directory.
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
 5. Commit each fix following the commit standard below.
 6. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
