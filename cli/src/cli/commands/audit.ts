@@ -43,6 +43,14 @@ import { parseExceptionFile } from "./prune.js";
 
 export type AuditStep = "audit" | "validate" | "fix";
 
+const STEP_ORDER: AuditStep[] = ["audit", "validate", "fix"];
+
+interface SoftLimitState {
+  retries: number;
+}
+
+type PipelineSignal = "continue" | "stop" | "retry" | "abort";
+
 export interface AuditOptions {
   startStep: AuditStep;
   maxIterations: number; // 0 = unlimited
@@ -336,6 +344,103 @@ async function runFixStep(
 }
 
 // ─────────────────────────────────────────────────────────────
+// Pipeline
+// ─────────────────────────────────────────────────────────────
+
+type RateLimitResult<T> =
+  | { signal: "ok"; result: T }
+  | { signal: "retry" | "abort" };
+
+async function withRateLimitRetry<T>(
+  fn: () => Promise<T>,
+  isRateLimited: (result: T) => boolean,
+  state: SoftLimitState,
+  config: Config,
+  engine: Engine,
+): Promise<RateLimitResult<T>> {
+  const result = await fn();
+  if (!isRateLimited(result)) {
+    state.retries = 0;
+    return { signal: "ok", result };
+  }
+
+  if (
+    await handleSoftRateLimit(
+      state.retries,
+      config.softLimitRetries,
+      config.softLimitWait,
+    )
+  ) {
+    state.retries++;
+    return { signal: "retry" };
+  }
+
+  state.retries = 0;
+  if (engine.switchToFallback?.()) {
+    return { signal: "retry" };
+  }
+
+  logError("Rate limit persisted, no fallback available");
+  process.exitCode = 1;
+  return { signal: "abort" };
+}
+
+async function runPipeline(
+  steps: AuditStep[],
+  engine: Engine,
+  auditPrompt: string,
+  fixPrompt: string,
+  logDir: string,
+  iter: number,
+  state: SoftLimitState,
+  config: Config,
+): Promise<PipelineSignal> {
+  let matchedExceptions = "";
+
+  for (const step of steps) {
+    switch (step) {
+      case "audit": {
+        const r = await withRateLimitRetry(
+          () => runAuditStep(engine, auditPrompt, logDir, iter),
+          (o) => o.result === "rate-limited",
+          state,
+          config,
+          engine,
+        );
+        if (r.signal !== "ok") return r.signal;
+        if (r.result.result === "stop") return "stop";
+        matchedExceptions = r.result.matchedExceptions;
+        break;
+      }
+      case "validate": {
+        const r = await withRateLimitRetry(
+          () => runValidateStep(engine, matchedExceptions, logDir, iter),
+          (o) => o === "rate-limited",
+          state,
+          config,
+          engine,
+        );
+        if (r.signal !== "ok") return r.signal;
+        break;
+      }
+      case "fix": {
+        const r = await withRateLimitRetry(
+          () => runFixStep(engine, fixPrompt, logDir, iter),
+          (o) => o === "rate-limited",
+          state,
+          config,
+          engine,
+        );
+        if (r.signal !== "ok") return r.signal;
+        break;
+      }
+    }
+  }
+
+  return "continue";
+}
+
+// ─────────────────────────────────────────────────────────────
 // Main audit loop
 // ─────────────────────────────────────────────────────────────
 
@@ -395,32 +500,8 @@ export async function auditLoop(
   console.log(`Test command: ${testCmd ?? "none detected"}`);
 
   let iter = 0;
-  let firstIter = true;
-  let softLimitRetries = 0;
-
-  async function handleRateLimit(): Promise<boolean> {
-    if (
-      await handleSoftRateLimit(
-        softLimitRetries,
-        config.softLimitRetries,
-        config.softLimitWait,
-      )
-    ) {
-      softLimitRetries++;
-      iter--;
-      return true;
-    }
-
-    softLimitRetries = 0;
-    if (engine.switchToFallback?.()) {
-      iter--;
-      return true;
-    }
-
-    logError("Rate limit persisted, no fallback available");
-    process.exitCode = 1;
-    return false;
-  }
+  const rateLimitState: SoftLimitState = { retries: 0 };
+  let skipToIndex = STEP_ORDER.indexOf(options.startStep);
 
   while (true) {
     iter++;
@@ -437,110 +518,30 @@ export async function auditLoop(
     console.log("");
     console.log(pc.cyan(formatDivider(`Iteration ${iter}`)));
 
-    if (firstIter) {
-      firstIter = false;
+    const steps = STEP_ORDER.slice(skipToIndex);
+    skipToIndex = 0;
 
-      switch (options.startStep) {
-        case "audit": {
-          const auditOutput = await runAuditStep(
-            engine,
-            auditPrompt,
-            logDir,
-            iter,
-          );
-          if (auditOutput.result === "rate-limited") {
-            if (await handleRateLimit()) continue;
-            return;
-          }
-          if (auditOutput.result === "stop") {
-            notify(
-              `Willie: codebase clean after ${iter} iteration(s) on ${projectName}. No findings.`,
-            );
-            break;
-          }
-          softLimitRetries = 0;
+    const signal = await runPipeline(
+      steps,
+      engine,
+      auditPrompt,
+      fixPrompt,
+      logDir,
+      iter,
+      rateLimitState,
+      config,
+    );
 
-          const valResult = await runValidateStep(
-            engine,
-            auditOutput.matchedExceptions,
-            logDir,
-            iter,
-          );
-          if (valResult === "rate-limited") {
-            if (await handleRateLimit()) continue;
-            return;
-          }
-          softLimitRetries = 0;
-
-          const fixResult = await runFixStep(engine, fixPrompt, logDir, iter);
-          if (fixResult === "rate-limited") {
-            if (await handleRateLimit()) continue;
-            return;
-          }
-          softLimitRetries = 0;
-          continue;
-        }
-        case "validate": {
-          const valResult = await runValidateStep(engine, "", logDir, iter);
-          if (valResult === "rate-limited") {
-            if (await handleRateLimit()) continue;
-            return;
-          }
-          softLimitRetries = 0;
-
-          const fixResult = await runFixStep(engine, fixPrompt, logDir, iter);
-          if (fixResult === "rate-limited") {
-            if (await handleRateLimit()) continue;
-            return;
-          }
-          softLimitRetries = 0;
-          continue;
-        }
-        case "fix": {
-          const fixResult = await runFixStep(engine, fixPrompt, logDir, iter);
-          if (fixResult === "rate-limited") {
-            if (await handleRateLimit()) continue;
-            return;
-          }
-          softLimitRetries = 0;
-          continue;
-        }
-      }
-
-      // If audit step returned "stop" (clean), we break above
-      if (options.startStep === "audit") break;
-    } else {
-      const auditOutput = await runAuditStep(engine, auditPrompt, logDir, iter);
-      if (auditOutput.result === "rate-limited") {
-        if (await handleRateLimit()) continue;
-        return;
-      }
-      if (auditOutput.result === "stop") {
-        notify(
-          `Willie: codebase clean after ${iter} iteration(s) on ${projectName}. No findings.`,
-        );
-        break;
-      }
-      softLimitRetries = 0;
-
-      const valResult = await runValidateStep(
-        engine,
-        auditOutput.matchedExceptions,
-        logDir,
-        iter,
+    if (signal === "abort") return;
+    if (signal === "retry") {
+      iter--;
+      continue;
+    }
+    if (signal === "stop") {
+      notify(
+        `Willie: codebase clean after ${iter} iteration(s) on ${projectName}. No findings.`,
       );
-      if (valResult === "rate-limited") {
-        if (await handleRateLimit()) continue;
-        return;
-      }
-      softLimitRetries = 0;
-
-      const fixResult = await runFixStep(engine, fixPrompt, logDir, iter);
-      if (fixResult === "rate-limited") {
-        if (await handleRateLimit()) continue;
-        return;
-      }
-      softLimitRetries = 0;
+      break;
     }
   }
 
