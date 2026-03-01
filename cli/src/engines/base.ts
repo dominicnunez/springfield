@@ -305,9 +305,8 @@ Rules:
    - **Correctness:** logic errors, race conditions, error handling gaps, missing error context at package boundaries
    - **Maintainability:** misleading comments, dead code/config, magic numbers that should be named constants, misconfigurations
    - **Testing:** see rule 7
-3. Known exceptions are appended to this prompt — do not re-flag them
-4. Include ALL real findings regardless of fix difficulty — small fixes (wrong comments, dead config, missing constants) are valid findings. The fix step decides effort, not the audit step.
-5. Write findings to audit/report.md. You MUST use the write tool. Use this EXACT format for each finding:
+3. Include ALL real findings regardless of fix difficulty — small fixes (wrong comments, dead config, missing constants) are valid findings. The fix step decides effort, not the audit step.
+4. Write findings to audit/report.md. You MUST use the write tool. Use this EXACT format for each finding:
 
 ### [Security] Hardcoded credentials in source
 - **Severity**: Critical
@@ -318,8 +317,8 @@ Rules:
 Categories: Security, Bug, Performance, Code Quality, Error Handling, Configuration, Testing
 
 The format is critical: "### [Category]" with brackets, then severity/file/details/fix on separate lines.
-6. If no issues found, do not create audit/report.md
-7. Check tests for:
+5. If no issues found, do not create audit/report.md
+6. Check tests for:
    - Untested error handling, security boundaries, and data validation (not every uncovered branch — focus on paths where a bug would cause real damage)
    - Cruft tests that test implementation details instead of behavior (mocking internals, asserting on log output, snapshot tests of serialization formats)
    - Tests that pass but verify nothing meaningful (empty assertions, tautologies, verbatim duplicates of other tests)
@@ -395,6 +394,10 @@ Rules:
    - misreads.md — finding was factually wrong (should have been caught in validate step)
    - design.md — finding describes behavior that is correct by design
    Agents can create additional domain-specific files in the directory.
+   If any exceptions file exceeds ~80 entries, split it into domain-specific files
+   (e.g. risks.md → risks-auth.md + risks-deps.md). Move entries — don't duplicate.
+   Keep the original file header in each new file. The directory is scanned dynamically,
+   so any .md filename works.
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
 5. Commit each fix following the commit standard below.
 6. Do not reference finding IDs, report categories, or audit/report.md in commit messages.

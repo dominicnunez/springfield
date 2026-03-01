@@ -28,12 +28,14 @@ import {
   detectTestCommand,
 } from "../../tasks/verification.js";
 import {
+  formatDivider,
   logDebug,
   logError,
   logInfo,
   logSuccess,
   logWarning,
 } from "../../ui/logger.js";
+import { parseExceptionFile } from "./prune.js";
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -134,22 +136,33 @@ function ensureAuditDir(): void {
   }
 }
 
-function readExceptions(): string {
-  if (!existsSync(EXCEPTIONS_DIR)) return "";
+function extractFindingFiles(reportPath: string): Set<string> {
+  if (!existsSync(reportPath)) return new Set();
+  const content = readFileSync(reportPath, "utf-8");
+  const files = new Set<string>();
+  for (const match of content.matchAll(/^- \*\*File\*\*:\s*(\S+)/gm)) {
+    files.add(match[1].split(":")[0]);
+  }
+  return files;
+}
 
-  const files = readdirSync(EXCEPTIONS_DIR)
+function readMatchingExceptions(findingFiles: Set<string>): string {
+  if (!existsSync(EXCEPTIONS_DIR) || findingFiles.size === 0) return "";
+  const mdFiles = readdirSync(EXCEPTIONS_DIR)
     .filter((f) => f.endsWith(".md"))
     .sort();
-
-  if (files.length === 0) return "";
-
-  const parts: string[] = [];
-  for (const file of files) {
-    const content = readFileSync(join(EXCEPTIONS_DIR, file), "utf-8").trim();
-    if (content) parts.push(content);
+  const matched: string[] = [];
+  for (const file of mdFiles) {
+    const filePath = join(EXCEPTIONS_DIR, file);
+    const content = readFileSync(filePath, "utf-8").trim();
+    const parsed = parseExceptionFile(filePath, content);
+    for (const entry of parsed.entries) {
+      if (entry.location && findingFiles.has(entry.location)) {
+        matched.push(entry.rawText);
+      }
+    }
   }
-
-  return parts.join("\n\n");
+  return matched.join("\n\n");
 }
 
 function logToFile(
@@ -204,6 +217,11 @@ function resolveAuditPrompt(
 type AuditStepResult = "continue" | "stop" | "rate-limited";
 type StepResult = "ok" | "rate-limited";
 
+interface AuditStepOutput {
+  result: AuditStepResult;
+  matchedExceptions: string;
+}
+
 function checkRateLimited(result: EngineResult): boolean {
   return !!(result.softRateLimited || result.hardRateLimited);
 }
@@ -213,18 +231,14 @@ async function runAuditStep(
   auditPrompt: string,
   logDir: string,
   iter: number,
-): Promise<AuditStepResult> {
-  logInfo("STEP 1: Running audit...");
+): Promise<AuditStepOutput> {
+  logInfo("Step 1: Running audit...");
 
-  const exceptions = readExceptions();
-  const fullPrompt = exceptions
-    ? `${auditPrompt}\n\n--- KNOWN EXCEPTIONS (do not re-flag) ---\n${exceptions}\n--- END KNOWN EXCEPTIONS ---`
-    : auditPrompt;
-
-  const result = await engine.run(fullPrompt);
+  const result = await engine.run(auditPrompt);
   logToFile(logDir, iter, "audit", result.output);
 
-  if (checkRateLimited(result)) return "rate-limited";
+  if (checkRateLimited(result))
+    return { result: "rate-limited", matchedExceptions: "" };
 
   if (!result.success) {
     logWarning(`Claude exited with code ${result.exitCode} for audit step`);
@@ -232,28 +246,37 @@ async function runAuditStep(
 
   if (!existsSync(REPORT_FILE)) {
     logSuccess("No audit/report.md generated — codebase is clean!");
-    return "stop";
+    return { result: "stop", matchedExceptions: "" };
   }
 
   const findingCount = countFindings(REPORT_FILE);
   if (findingCount === 0) {
     logSuccess("Audit report has no findings. Cleaning up.");
     unlinkSync(REPORT_FILE);
-    return "stop";
+    return { result: "stop", matchedExceptions: "" };
   }
 
   logInfo(`Audit found ${findingCount} issue(s).`);
-  return "continue";
+
+  const findingFiles = extractFindingFiles(REPORT_FILE);
+  const matchedExceptions = readMatchingExceptions(findingFiles);
+
+  return { result: "continue", matchedExceptions };
 }
 
 async function runValidateStep(
   engine: Engine,
+  matchedExceptions: string,
   logDir: string,
   iter: number,
 ): Promise<StepResult> {
-  logInfo("STEP 2: Validating findings...");
+  logInfo("Step 2: Validating findings...");
 
-  const result = await engine.run(VALIDATE_PROMPT);
+  const prompt = matchedExceptions
+    ? `${VALIDATE_PROMPT}\n\n--- KNOWN EXCEPTIONS (already classified) ---\n${matchedExceptions}\n--- END KNOWN EXCEPTIONS ---`
+    : VALIDATE_PROMPT;
+
+  const result = await engine.run(prompt);
   logToFile(logDir, iter, "validate", result.output);
 
   if (checkRateLimited(result)) return "rate-limited";
@@ -289,7 +312,7 @@ async function runFixStep(
     return "ok";
   }
 
-  logInfo("STEP 3: Fixing issues...");
+  logInfo("Step 3: Fixing issues...");
 
   const result = await engine.run(fixPrompt);
   logToFile(logDir, iter, "fix", result.output);
@@ -301,7 +324,7 @@ async function runFixStep(
   }
 
   if (!existsSync(REPORT_FILE)) {
-    logSuccess("All issues resolved.");
+    logInfo("All issues resolved.");
   } else {
     const remaining = countFindings(REPORT_FILE);
     if (remaining > 0) {
@@ -362,15 +385,14 @@ export async function auditLoop(
     options.maxIterations > 0 ? String(options.maxIterations) : "unlimited";
 
   console.log("");
-  console.log(pc.cyan("=== Willie Starting ==="));
-  console.log(`  Project: ${projectName}`);
-  console.log(`  Start step: ${options.startStep}`);
-  console.log(`  Max iterations: ${maxStr}`);
-  console.log(`  Model: ${model} (effort: ${effort})`);
-  console.log(`  Audit prompt: ${resolved.source}`);
-  console.log(`  Lint command: ${lintCmd ?? "none detected"}`);
-  console.log(`  Test command: ${testCmd ?? "none detected"}`);
-  console.log("");
+  console.log(pc.cyan(formatDivider("Willie Starting")));
+  console.log(`Project: ${projectName}`);
+  console.log(`Start step: ${options.startStep}`);
+  console.log(`Max iterations: ${maxStr}`);
+  console.log(`Model: ${model} (effort: ${effort})`);
+  console.log(`Audit prompt: ${resolved.source}`);
+  console.log(`Lint command: ${lintCmd ?? "none detected"}`);
+  console.log(`Test command: ${testCmd ?? "none detected"}`);
 
   let iter = 0;
   let firstIter = true;
@@ -413,24 +435,24 @@ export async function auditLoop(
     }
 
     console.log("");
-    console.log(pc.cyan(`========== ITERATION ${iter} ==========`));
+    console.log(pc.cyan(formatDivider(`Iteration ${iter}`)));
 
     if (firstIter) {
       firstIter = false;
 
       switch (options.startStep) {
         case "audit": {
-          const auditResult = await runAuditStep(
+          const auditOutput = await runAuditStep(
             engine,
             auditPrompt,
             logDir,
             iter,
           );
-          if (auditResult === "rate-limited") {
+          if (auditOutput.result === "rate-limited") {
             if (await handleRateLimit()) continue;
             return;
           }
-          if (auditResult === "stop") {
+          if (auditOutput.result === "stop") {
             notify(
               `Willie: codebase clean after ${iter} iteration(s) on ${projectName}. No findings.`,
             );
@@ -438,7 +460,12 @@ export async function auditLoop(
           }
           softLimitRetries = 0;
 
-          const valResult = await runValidateStep(engine, logDir, iter);
+          const valResult = await runValidateStep(
+            engine,
+            auditOutput.matchedExceptions,
+            logDir,
+            iter,
+          );
           if (valResult === "rate-limited") {
             if (await handleRateLimit()) continue;
             return;
@@ -454,7 +481,7 @@ export async function auditLoop(
           continue;
         }
         case "validate": {
-          const valResult = await runValidateStep(engine, logDir, iter);
+          const valResult = await runValidateStep(engine, "", logDir, iter);
           if (valResult === "rate-limited") {
             if (await handleRateLimit()) continue;
             return;
@@ -483,12 +510,12 @@ export async function auditLoop(
       // If audit step returned "stop" (clean), we break above
       if (options.startStep === "audit") break;
     } else {
-      const auditResult = await runAuditStep(engine, auditPrompt, logDir, iter);
-      if (auditResult === "rate-limited") {
+      const auditOutput = await runAuditStep(engine, auditPrompt, logDir, iter);
+      if (auditOutput.result === "rate-limited") {
         if (await handleRateLimit()) continue;
         return;
       }
-      if (auditResult === "stop") {
+      if (auditOutput.result === "stop") {
         notify(
           `Willie: codebase clean after ${iter} iteration(s) on ${projectName}. No findings.`,
         );
@@ -496,7 +523,12 @@ export async function auditLoop(
       }
       softLimitRetries = 0;
 
-      const valResult = await runValidateStep(engine, logDir, iter);
+      const valResult = await runValidateStep(
+        engine,
+        auditOutput.matchedExceptions,
+        logDir,
+        iter,
+      );
       if (valResult === "rate-limited") {
         if (await handleRateLimit()) continue;
         return;
@@ -513,7 +545,7 @@ export async function auditLoop(
   }
 
   console.log("");
-  console.log(pc.cyan("=== Willie Complete ==="));
-  console.log(`  Total iterations: ${iter}`);
-  console.log(`  Logs: ${logDir}/`);
+  console.log(pc.cyan(formatDivider("Willie Complete")));
+  console.log(`Total iterations: ${iter}`);
+  console.log(`Logs: ${logDir}/`);
 }
