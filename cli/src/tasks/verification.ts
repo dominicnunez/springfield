@@ -38,9 +38,7 @@ export function detectPackageManager(): PackageManager {
  * Check package.json for a script and return the PM-specific run command.
  * Special-cases "test" since all PMs support it as a first-class command.
  */
-export function detectPackageScript(
-  scriptName: string,
-): string | undefined {
+export function detectPackageScript(scriptName: string): string | undefined {
   if (!existsSync("package.json")) return undefined;
 
   try {
