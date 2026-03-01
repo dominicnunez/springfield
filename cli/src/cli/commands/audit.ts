@@ -3,8 +3,8 @@ import {
   appendFileSync,
   existsSync,
   mkdirSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -483,12 +483,7 @@ export async function auditLoop(
       // If audit step returned "stop" (clean), we break above
       if (options.startStep === "audit") break;
     } else {
-      const auditResult = await runAuditStep(
-        engine,
-        auditPrompt,
-        logDir,
-        iter,
-      );
+      const auditResult = await runAuditStep(engine, auditPrompt, logDir, iter);
       if (auditResult === "rate-limited") {
         if (await handleRateLimit()) continue;
         return;
