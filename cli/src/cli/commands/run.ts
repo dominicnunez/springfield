@@ -500,6 +500,7 @@ export async function runLoop(
           startStep: "audit",
           maxIterations: config.willieMaxIterations,
           auditPromptPath: config.willieAuditPrompt,
+          lintCmd: config.lintCmd,
           verbose: options.verbose,
         });
       }

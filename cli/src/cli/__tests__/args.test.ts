@@ -29,6 +29,7 @@ function baseConfig(overrides: Partial<Config> = {}): Config {
     willieEffort: undefined,
     logDir: join(homedir(), ".sfk", "logs"),
     progressDir: join(homedir(), ".sfk", "progress"),
+    lintCmd: undefined,
     auditAfterComplete: false,
     ...overrides,
   };

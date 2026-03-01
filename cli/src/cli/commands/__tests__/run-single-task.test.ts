@@ -72,6 +72,7 @@ describe("single task mode", () => {
       willieEffort: undefined,
       logDir: join(tempRoot, "logs"),
       progressDir: join(tempRoot, "progress"),
+      lintCmd: undefined,
       auditAfterComplete: false,
     };
 
