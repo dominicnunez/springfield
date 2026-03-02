@@ -3,11 +3,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import { basename, join } from "node:path";
 import pc from "picocolors";
 import type { Config } from "../../config/loader.js";
-import {
-  getCurrentModel,
-  getRalphEffort,
-  getRalphModel,
-} from "../../config/loader.js";
+import { getCurrentModel, getRalphEffort } from "../../config/loader.js";
 import {
   COMPLETE_MARKER,
   type Engine,
@@ -134,7 +130,7 @@ function getHeadSha(): string | null {
 
 function createEngine(config: Config): Engine {
   if (config.engine === "claude") {
-    return new ClaudeEngine(getRalphModel(config), getRalphEffort(config));
+    return new ClaudeEngine(getCurrentModel(config), getRalphEffort(config));
   }
   if (config.engine === "codex") {
     return new CodexEngine(config.codexModel);
