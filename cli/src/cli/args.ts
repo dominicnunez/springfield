@@ -65,12 +65,13 @@ export function parseArgs(argv: string[]): ParsedArgs {
     .command("run", { isDefault: true })
     .description("Run the ralph coding loop (default)")
     .argument("[task]", "Single task to run (non-directory positional)")
-    .option("--engine <type>", "AI engine to use: opencode or claude")
+    .option("--engine <type>", "AI engine to use: opencode, claude, or codex")
     .option(
       "--opencode",
       "Use OpenCode engine (shortcut for --engine opencode)",
     )
     .option("--claude", "Use Claude Code engine (shortcut for --engine claude)")
+    .option("--codex", "Use Codex CLI engine (shortcut for --engine codex)")
     .option("--model <name>", "Override the model for the selected engine")
     .option(
       "--max-iterations <n>",
@@ -94,9 +95,15 @@ export function parseArgs(argv: string[]): ParsedArgs {
       let engine: EngineType | undefined;
       if (opts.claude) {
         engine = "claude";
+      } else if (opts.codex) {
+        engine = "codex";
       } else if (opts.opencode) {
         engine = "opencode";
-      } else if (opts.engine === "claude" || opts.engine === "opencode") {
+      } else if (
+        opts.engine === "claude" ||
+        opts.engine === "opencode" ||
+        opts.engine === "codex"
+      ) {
         engine = opts.engine;
       }
 
@@ -193,6 +200,8 @@ export function mergeOptions(config: Config, cliOptions: CliOptions): Config {
   if (cliOptions.model !== undefined) {
     if (merged.engine === "claude") {
       merged.claudeModel = cliOptions.model;
+    } else if (merged.engine === "codex") {
+      merged.codexModel = cliOptions.model;
     } else {
       merged.ocPrimeModel = cliOptions.model;
     }

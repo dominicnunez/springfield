@@ -16,6 +16,7 @@ type = opencode
 [models]
 claude = sonnet
 claude-effort = high
+# codex =
 opencode-primary = big-pickle
 # opencode-fallback =
 

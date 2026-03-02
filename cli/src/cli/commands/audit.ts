@@ -21,6 +21,7 @@ import {
   VALIDATE_PROMPT,
 } from "../../engines/base.js";
 import { ClaudeEngine } from "../../engines/claude.js";
+import { CodexEngine } from "../../engines/codex.js";
 import { OpenCodeEngine } from "../../engines/opencode.js";
 import { handleSoftRateLimit } from "../../engines/rate-limit.js";
 import {
@@ -66,6 +67,11 @@ export interface AuditOptions {
 const AUDIT_DIR = "audit";
 const REPORT_FILE = join(AUDIT_DIR, "report.md");
 const EXCEPTIONS_DIR = join(AUDIT_DIR, "exceptions");
+const ENGINE_CLI_NAMES: Record<string, string> = {
+  claude: "Claude CLI",
+  codex: "Codex CLI",
+  opencode: "OpenCode CLI",
+};
 
 const ENTRY_FORMAT = `>
 > Entry format:
@@ -461,15 +467,15 @@ export async function auditLoop(
   let engine: Engine;
   if (config.engine === "opencode") {
     engine = new OpenCodeEngine(model, config.ocFallModel);
+  } else if (config.engine === "codex") {
+    engine = new CodexEngine(model === "default" ? undefined : model);
   } else {
     engine = new ClaudeEngine(model, effort);
   }
 
   if (!engine.isAvailable()) {
-    const engineName = config.engine === "opencode" ? "opencode" : "claude";
-    logError(
-      `'${engineName}' command not found. Willie requires ${engineName} CLI.`,
-    );
+    const cliName = ENGINE_CLI_NAMES[engine.name] ?? `${engine.name} CLI`;
+    logError(`'${engine.name}' command not found. Willie requires ${cliName}.`);
     process.exitCode = 1;
     return;
   }

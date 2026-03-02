@@ -17,6 +17,7 @@ function baseConfig(overrides: Partial<Config> = {}): Config {
     engine: "opencode",
     claudeModel: "sonnet",
     claudeEffort: "high",
+    codexModel: undefined,
     ocPrimeModel: "big-pickle",
     ocFallModel: undefined,
     softLimitRetries: 3,
@@ -34,9 +35,9 @@ function baseConfig(overrides: Partial<Config> = {}): Config {
     willieAuditPrompt: undefined,
     willieModel: undefined,
     willieEffort: undefined,
+    lintCmd: undefined,
     logDir: join(homedir(), ".sfk", "logs"),
     progressDir: join(homedir(), ".sfk", "progress"),
-    lintCmd: undefined,
     auditAfterComplete: false,
     ...overrides,
   };
@@ -115,6 +116,7 @@ type = claude
 [models]
 claude = opus
 claude-effort = medium
+codex = gpt-5-codex
 opencode-primary = gpt-5
 opencode-fallback = gpt-4
 
@@ -148,6 +150,7 @@ progress-dir = /tmp/progress
       expect(result["engine.type"]).toBe("claude");
       expect(result["models.claude"]).toBe("opus");
       expect(result["models.claude-effort"]).toBe("medium");
+      expect(result["models.codex"]).toBe("gpt-5-codex");
       expect(result["models.opencode-primary"]).toBe("gpt-5");
       expect(result["models.opencode-fallback"]).toBe("gpt-4");
       expect(result["rate-limits.soft-retries"]).toBe("7");
@@ -189,11 +192,13 @@ progress-dir = /tmp/progress
       applyConfigToConfig(config, {
         "models.claude": "opus",
         "models.claude-effort": "medium",
+        "models.codex": "gpt-5",
         "models.opencode-primary": "gpt-5",
         "models.opencode-fallback": "gpt-4",
       });
       expect(config.claudeModel).toBe("opus");
       expect(config.claudeEffort).toBe("medium");
+      expect(config.codexModel).toBe("gpt-5");
       expect(config.ocPrimeModel).toBe("gpt-5");
       expect(config.ocFallModel).toBe("gpt-4");
     });
@@ -311,6 +316,14 @@ progress-dir = /tmp/progress
       ).toBe("gpt-5");
     });
 
+    test("getCurrentModel returns codex model when engine is codex", () => {
+      expect(
+        getCurrentModel(
+          baseConfig({ engine: "codex", codexModel: "gpt-5-codex" }),
+        ),
+      ).toBe("gpt-5-codex");
+    });
+
     test("getRalphModel uses per-agent override for claude", () => {
       expect(
         getRalphModel(
@@ -341,6 +354,18 @@ progress-dir = /tmp/progress
       ).toBe("gpt-5");
     });
 
+    test("getRalphModel returns codex model regardless of ralphModel", () => {
+      expect(
+        getRalphModel(
+          baseConfig({
+            engine: "codex",
+            codexModel: "gpt-5-codex",
+            ralphModel: "ignored",
+          }),
+        ),
+      ).toBe("gpt-5-codex");
+    });
+
     test("getRalphEffort uses per-agent override", () => {
       expect(
         getRalphEffort(
@@ -369,6 +394,12 @@ progress-dir = /tmp/progress
       expect(
         getWillieModel(baseConfig({ engine: "claude", claudeModel: "sonnet" })),
       ).toBe("sonnet");
+    });
+
+    test("getWillieModel defaults to engine's primary model (codex)", () => {
+      expect(
+        getWillieModel(baseConfig({ engine: "codex", codexModel: "gpt-5" })),
+      ).toBe("gpt-5");
     });
 
     test("getWillieEffort uses per-agent override", () => {

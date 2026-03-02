@@ -16,6 +16,7 @@ import {
   generateSingleTaskPrompt,
 } from "../../engines/base.js";
 import { ClaudeEngine } from "../../engines/claude.js";
+import { CodexEngine } from "../../engines/codex.js";
 import { OpenCodeEngine } from "../../engines/opencode.js";
 import { handleSoftRateLimit } from "../../engines/rate-limit.js";
 import {
@@ -42,6 +43,11 @@ import {
   logWarning,
 } from "../../ui/logger.js";
 
+const ENGINE_INSTALL_NAMES: Record<string, string> = {
+  claude: "Claude CLI",
+  codex: "Codex CLI",
+  opencode: "OpenCode CLI",
+};
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
@@ -130,6 +136,9 @@ function createEngine(config: Config): Engine {
   if (config.engine === "claude") {
     return new ClaudeEngine(getRalphModel(config), getRalphEffort(config));
   }
+  if (config.engine === "codex") {
+    return new CodexEngine(config.codexModel);
+  }
   return new OpenCodeEngine(config.ocPrimeModel, config.ocFallModel);
 }
 
@@ -156,8 +165,9 @@ export async function runLoop(
   const engine = createEngine(config);
 
   if (!engine.isAvailable()) {
+    const installName = ENGINE_INSTALL_NAMES[engine.name] ?? "required CLI";
     logError(
-      `'${engine.name}' command not found. Please install ${engine.name === "claude" ? "Claude CLI" : "OpenCode CLI"}.`,
+      `'${engine.name}' command not found. Please install ${installName}.`,
     );
     process.exit(1);
   }
@@ -545,8 +555,9 @@ export async function runSingleTask(
   const engine: Engine = engineOverride ?? createEngine(config);
 
   if (!engine.isAvailable()) {
+    const installName = ENGINE_INSTALL_NAMES[engine.name] ?? "required CLI";
     logError(
-      `'${engine.name}' command not found. Please install ${engine.name === "claude" ? "Claude CLI" : "OpenCode CLI"}.`,
+      `'${engine.name}' command not found. Please install ${installName}.`,
     );
     process.exit(1);
   }

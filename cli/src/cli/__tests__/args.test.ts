@@ -10,6 +10,7 @@ function baseConfig(overrides: Partial<Config> = {}): Config {
     engine: "opencode",
     claudeModel: "sonnet",
     claudeEffort: "high",
+    codexModel: undefined,
     ocPrimeModel: "big-pickle",
     ocFallModel: undefined,
     softLimitRetries: 3,
@@ -27,9 +28,9 @@ function baseConfig(overrides: Partial<Config> = {}): Config {
     willieAuditPrompt: undefined,
     willieModel: undefined,
     willieEffort: undefined,
+    lintCmd: undefined,
     logDir: join(homedir(), ".sfk", "logs"),
     progressDir: join(homedir(), ".sfk", "progress"),
-    lintCmd: undefined,
     auditAfterComplete: false,
     ...overrides,
   };
@@ -94,6 +95,16 @@ describe("parseArgs", () => {
   it("parses --opencode shortcut as engine override", () => {
     const { options } = parseArgs(["node", "sfk", "--opencode"]);
     expect(options.engine).toBe("opencode");
+  });
+
+  it("parses --codex shortcut as engine override", () => {
+    const { options } = parseArgs(["node", "sfk", "--codex"]);
+    expect(options.engine).toBe("codex");
+  });
+
+  it("parses --engine codex", () => {
+    const { options } = parseArgs(["node", "sfk", "--engine", "codex"]);
+    expect(options.engine).toBe("codex");
   });
 
   it("parses --skip-commit flag", () => {
@@ -185,6 +196,18 @@ describe("mergeOptions", () => {
 
     expect(merged.engine).toBe("claude");
     expect(merged.claudeModel).toBe("opus");
+  });
+
+  it("sets codex model when engine is codex", () => {
+    const config = baseConfig({
+      engine: "codex",
+      codexModel: "gpt-5-codex",
+    });
+    const merged = mergeOptions(config, { model: "gpt-5" });
+
+    expect(merged.codexModel).toBe("gpt-5");
+    expect(merged.claudeModel).toBe("sonnet");
+    expect(merged.ocPrimeModel).toBe("big-pickle");
   });
 
   it("overrides maxIterations", () => {

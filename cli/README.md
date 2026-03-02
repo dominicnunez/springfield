@@ -2,7 +2,7 @@
 
 **Springfield Kit** — An autonomous AI coding agent with enforced test verification.
 
-Ralph runs your AI coding assistant (OpenCode or Claude) in a loop, working through tasks from a PRD one at a time. The key differentiator: **it won't mark tasks complete unless tests are written and passing.**
+Ralph runs your AI coding assistant (OpenCode, Claude, or Codex) in a loop, working through tasks from a PRD one at a time. The key differentiator: **it won't mark tasks complete unless tests are written and passing.**
 
 ## Install
 
@@ -35,6 +35,7 @@ Ralph works through each task, running tests and committing progress automatical
 ```bash
 sfk                        # Uses PRD.md with OpenCode (default)
 sfk --claude               # Use Claude Code instead
+sfk --codex                # Use Codex CLI instead
 sfk --model opus           # Override model
 sfk --max-iterations 20    # Limit iterations
 sfk --skip-commit          # Don't auto-commit
@@ -55,6 +56,7 @@ type = opencode
 [models]
 claude = sonnet
 claude-effort = high
+# codex = gpt-5-codex
 opencode-primary = opencode/glm-5-free
 
 [ralph]
@@ -95,7 +97,7 @@ Override with `test-cmd` under `[ralph]` in config if needed.
 ## Requirements
 
 - Node.js 18+ or Bun
-- [OpenCode](https://opencode.ai) and/or [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- [OpenCode](https://opencode.ai), [Claude Code](https://docs.anthropic.com/en/docs/claude-code), and/or [Codex CLI](https://github.com/openai/codex)
 
 ## Links
 

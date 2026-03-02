@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { logWarning } from "../ui/logger.js";
 
-export type EngineType = "opencode" | "claude";
+export type EngineType = "opencode" | "claude" | "codex";
 export type EffortLevel = "high" | "medium" | "low";
 
 export const DEFAULT_OC_PRIME_MODEL = "big-pickle";
@@ -15,6 +15,7 @@ export interface Config {
   // General defaults
   claudeModel: string;
   claudeEffort: EffortLevel;
+  codexModel: string | undefined;
   ocPrimeModel: string;
   ocFallModel: string | undefined;
 
@@ -68,6 +69,7 @@ type = opencode
 [models]
 claude = sonnet
 claude-effort = high
+# codex =
 opencode-primary = opencode/glm-5-free
 # opencode-fallback =
 
@@ -190,7 +192,11 @@ export function applyConfigToConfig(
 ): void {
   // [engine]
   const engineType = parsed["engine.type"];
-  if (engineType === "claude" || engineType === "opencode") {
+  if (
+    engineType === "claude" ||
+    engineType === "opencode" ||
+    engineType === "codex"
+  ) {
     config.engine = engineType;
   } else if (engineType !== undefined) {
     logWarning(
@@ -204,6 +210,8 @@ export function applyConfigToConfig(
     const effort = parseEffort(parsed["models.claude-effort"]);
     if (effort) config.claudeEffort = effort;
   }
+  if (parsed["models.codex"]?.trim())
+    config.codexModel = parsed["models.codex"];
   if (parsed["models.opencode-primary"])
     config.ocPrimeModel = parsed["models.opencode-primary"];
   if (parsed["models.opencode-fallback"]?.trim())
@@ -306,7 +314,11 @@ function validatePath(path: string, name: string): string {
  * Apply legacy .env values to config object
  */
 function applyEnvToConfig(config: Config, env: Record<string, string>): void {
-  if (env.ENGINE === "claude" || env.ENGINE === "opencode")
+  if (
+    env.ENGINE === "claude" ||
+    env.ENGINE === "opencode" ||
+    env.ENGINE === "codex"
+  )
     config.engine = env.ENGINE;
   if (env.MAX_ITERATIONS)
     config.maxIterations = parseIntSafe(env.MAX_ITERATIONS, 10);
@@ -321,6 +333,7 @@ function applyEnvToConfig(config: Config, env: Record<string, string>): void {
     if (val !== undefined) config.pushAfterCommit = val;
   }
   if (env.CLAUDE_MODEL) config.claudeModel = env.CLAUDE_MODEL;
+  if (env.CODEX_MODEL?.trim()) config.codexModel = env.CODEX_MODEL;
   if (env.OC_PRIME_MODEL) config.ocPrimeModel = env.OC_PRIME_MODEL;
   if (env.OC_FALL_MODEL?.trim()) config.ocFallModel = env.OC_FALL_MODEL;
   if (env.SOFT_LIMIT_RETRIES)
@@ -381,6 +394,7 @@ function defaultConfig(): Config {
     engine: "opencode",
     claudeModel: "sonnet",
     claudeEffort: "high",
+    codexModel: undefined,
     ocPrimeModel: DEFAULT_OC_PRIME_MODEL,
     ocFallModel: undefined,
     softLimitRetries: 3,
@@ -493,6 +507,7 @@ export function loadConfig(): Config {
     processEnv.PUSH_AFTER_COMMIT = process.env.PUSH_AFTER_COMMIT;
   if (process.env.CLAUDE_MODEL)
     processEnv.CLAUDE_MODEL = process.env.CLAUDE_MODEL;
+  if (process.env.CODEX_MODEL) processEnv.CODEX_MODEL = process.env.CODEX_MODEL;
   if (process.env.OC_PRIME_MODEL)
     processEnv.OC_PRIME_MODEL = process.env.OC_PRIME_MODEL;
   if (process.env.OC_FALL_MODEL)
@@ -527,7 +542,9 @@ export function loadConfig(): Config {
  * Get the current model based on engine type
  */
 export function getCurrentModel(config: Config): string {
-  return config.engine === "claude" ? config.claudeModel : config.ocPrimeModel;
+  if (config.engine === "claude") return config.claudeModel;
+  if (config.engine === "codex") return config.codexModel ?? "default";
+  return config.ocPrimeModel;
 }
 
 /**
@@ -536,6 +553,9 @@ export function getCurrentModel(config: Config): string {
 export function getRalphModel(config: Config): string {
   if (config.engine === "claude") {
     return config.ralphModel ?? config.claudeModel;
+  }
+  if (config.engine === "codex") {
+    return config.codexModel ?? "default";
   }
   if (config.engine === "opencode") {
     return config.ocPrimeModel;
@@ -555,7 +575,9 @@ export function getRalphEffort(config: Config): EffortLevel {
  */
 export function getWillieModel(config: Config): string {
   if (config.willieModel) return config.willieModel;
-  return config.engine === "claude" ? config.claudeModel : config.ocPrimeModel;
+  if (config.engine === "claude") return config.claudeModel;
+  if (config.engine === "codex") return config.codexModel ?? "default";
+  return config.ocPrimeModel;
 }
 
 /**

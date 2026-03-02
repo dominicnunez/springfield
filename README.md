@@ -10,6 +10,7 @@ npm install -g sfk
 # Then use anywhere
 sfk                        # Uses PRD.md with OpenCode (default)
 sfk --claude               # Use Claude Code
+sfk --codex                # Use Codex CLI
 sfk --model sonnet         # Override model
 ```
 
@@ -48,6 +49,7 @@ Ralph will work through each task, running tests and committing progress automat
 sfk                        # Uses PRD.md, OpenCode engine (default)
 sfk --opencode             # Explicit OpenCode
 sfk --claude               # Use Claude Code
+sfk --codex                # Use Codex CLI
 sfk --model big-pickle     # Override model
 sfk --max-iterations 20    # Custom iteration limit
 sfk --skip-commit          # Don't auto-commit
@@ -86,6 +88,7 @@ type = opencode
 [models]
 claude = sonnet
 claude-effort = high
+# codex = gpt-5-codex
 opencode-primary = big-pickle
 
 [ralph]
@@ -204,6 +207,7 @@ This prevents the AI from marking tasks complete without actually writing tests.
 |--------|-----|---------------|
 | OpenCode | `opencode` | `big-pickle` |
 | Claude | `claude` | `sonnet` |
+| Codex | `codex` | Codex CLI default |
 
 ### Rate Limit Handling (OpenCode)
 
@@ -221,6 +225,7 @@ If a rate limit is detected and `opencode-fallback` is configured, Ralph automat
 - Node.js 18+ or Bun
 - [OpenCode CLI](https://opencode.ai) (`opencode` command) - for OpenCode engine
 - [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude` command) - for Claude engine
+- [Codex CLI](https://github.com/openai/codex) (`codex` command) - for Codex engine
 
 ## Development
 

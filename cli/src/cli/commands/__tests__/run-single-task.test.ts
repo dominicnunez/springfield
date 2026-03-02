@@ -57,6 +57,7 @@ describe("single task mode", () => {
       pushAfterCommit: false,
       claudeModel: "sonnet",
       claudeEffort: "high",
+      codexModel: undefined,
       ocPrimeModel: "stub-model",
       ocFallModel: undefined,
       softLimitRetries: 3,
@@ -70,9 +71,9 @@ describe("single task mode", () => {
       willieAuditPrompt: undefined,
       willieModel: undefined,
       willieEffort: undefined,
+      lintCmd: undefined,
       logDir: join(tempRoot, "logs"),
       progressDir: join(tempRoot, "progress"),
-      lintCmd: undefined,
       auditAfterComplete: false,
     };
 
