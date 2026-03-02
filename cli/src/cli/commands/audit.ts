@@ -338,7 +338,9 @@ async function runFixStep(
   if (checkRateLimited(result)) return "rate-limited";
 
   if (!result.success) {
-    logWarning(`${engine.name} exited with code ${result.exitCode} for fix step`);
+    logWarning(
+      `${engine.name} exited with code ${result.exitCode} for fix step`,
+    );
   }
 
   if (!existsSync(REPORT_FILE)) {

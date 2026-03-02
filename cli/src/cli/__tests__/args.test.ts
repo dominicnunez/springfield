@@ -143,6 +143,33 @@ describe("parseArgs", () => {
     ]);
     expect(auditOptions.maxIterations).toBe(5);
   });
+
+  it("parses audit --codex shortcut as engine override", () => {
+    const { auditOptions } = parseArgs(["node", "sfk", "audit", "--codex"]);
+    expect(auditOptions.engine).toBe("codex");
+  });
+
+  it("parses audit --engine codex", () => {
+    const { auditOptions } = parseArgs([
+      "node",
+      "sfk",
+      "audit",
+      "--engine",
+      "codex",
+    ]);
+    expect(auditOptions.engine).toBe("codex");
+  });
+
+  it("parses audit --model override", () => {
+    const { auditOptions } = parseArgs([
+      "node",
+      "sfk",
+      "audit",
+      "--model",
+      "gpt-5-codex",
+    ]);
+    expect(auditOptions.model).toBe("gpt-5-codex");
+  });
 });
 
 describe("mergeOptions", () => {

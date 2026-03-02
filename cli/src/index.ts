@@ -28,12 +28,26 @@ async function main(): Promise<void> {
     }
 
     if (command === "audit") {
-      await auditLoop(finalConfig, {
+      const auditConfig = { ...finalConfig };
+      if (auditOptions.engine) {
+        auditConfig.engine = auditOptions.engine;
+      }
+      if (auditOptions.model !== undefined) {
+        if (auditConfig.engine === "claude") {
+          auditConfig.claudeModel = auditOptions.model;
+        } else if (auditConfig.engine === "codex") {
+          auditConfig.codexModel = auditOptions.model;
+        } else {
+          auditConfig.ocPrimeModel = auditOptions.model;
+        }
+      }
+
+      await auditLoop(auditConfig, {
         startStep: auditOptions.startStep ?? "audit",
         maxIterations:
-          auditOptions.maxIterations ?? finalConfig.willieMaxIterations,
+          auditOptions.maxIterations ?? auditConfig.willieMaxIterations,
         auditPromptPath:
-          auditOptions.auditPrompt ?? finalConfig.willieAuditPrompt,
+          auditOptions.auditPrompt ?? auditConfig.willieAuditPrompt,
         lintCmd: auditOptions.lintCmd,
         verbose: auditOptions.verbose,
       });

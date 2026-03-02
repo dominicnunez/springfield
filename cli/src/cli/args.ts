@@ -25,6 +25,8 @@ export interface AuditCliOptions {
   maxIterations?: number;
   auditPrompt?: string;
   lintCmd?: string;
+  engine?: EngineType;
+  model?: string;
   verbose?: boolean;
 }
 
@@ -126,6 +128,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
   program
     .command("audit")
     .description("Run the willie audit loop")
+    .option("--engine <type>", "AI engine to use: opencode, claude, or codex")
+    .option(
+      "--opencode",
+      "Use OpenCode engine (shortcut for --engine opencode)",
+    )
+    .option("--claude", "Use Claude Code engine (shortcut for --engine claude)")
+    .option("--codex", "Use Codex CLI engine (shortcut for --engine codex)")
+    .option("--model <name>", "Override the model for the selected engine")
     .option(
       "--step <step>",
       "Start from step: audit, validate, or fix",
@@ -149,11 +159,28 @@ export function parseArgs(argv: string[]): ParsedArgs {
         );
       }
 
+      let engine: EngineType | undefined;
+      if (opts.claude) {
+        engine = "claude";
+      } else if (opts.codex) {
+        engine = "codex";
+      } else if (opts.opencode) {
+        engine = "opencode";
+      } else if (
+        opts.engine === "claude" ||
+        opts.engine === "opencode" ||
+        opts.engine === "codex"
+      ) {
+        engine = opts.engine;
+      }
+
       Object.assign(auditCliOptions, {
         startStep: step,
         maxIterations: opts.maxIterations,
         auditPrompt: opts.auditPrompt,
         lintCmd: opts.lintCmd,
+        engine,
+        model: opts.model,
         verbose: opts.verbose,
       });
     });

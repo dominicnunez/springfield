@@ -235,6 +235,21 @@ describe("tasks/verification", () => {
       const files = getChangedTestFiles();
       expect(files).toEqual([]);
     });
+
+    test("detects untracked test files", () => {
+      writeFileSync(join(tempDir, "new.test.js"), "test('x', () => {})");
+
+      const files = getChangedTestFiles();
+      expect(files).toContain("new.test.js");
+    });
+
+    test("does not detect ignored untracked test files", () => {
+      writeFileSync(join(tempDir, ".gitignore"), "ignored.test.js\n");
+      writeFileSync(join(tempDir, "ignored.test.js"), "test('x', () => {})");
+
+      const files = getChangedTestFiles();
+      expect(files).not.toContain("ignored.test.js");
+    });
   });
 
   describe("detectPackageManager", () => {

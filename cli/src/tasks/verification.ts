@@ -193,6 +193,26 @@ export function getChangedTestFiles(): string[] {
     }
   }
 
+  // Check untracked files (new tests not yet staged)
+  const untracked = spawnSync(
+    "git",
+    ["ls-files", "--others", "--exclude-standard"],
+    {
+      encoding: "utf-8",
+      cwd: process.cwd(),
+    },
+  );
+
+  if (untracked.error) {
+    logWarning(`git ls-files --others failed: ${untracked.error.message}`);
+  } else if (untracked.stdout) {
+    for (const file of untracked.stdout.split("\n")) {
+      if (file && isTestFile(file)) {
+        testFiles.add(file);
+      }
+    }
+  }
+
   return Array.from(testFiles);
 }
 
