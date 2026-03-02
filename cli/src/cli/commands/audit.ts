@@ -255,7 +255,9 @@ async function runAuditStep(
     return { result: "rate-limited", matchedExceptions: "" };
 
   if (!result.success) {
-    logWarning(`Claude exited with code ${result.exitCode} for audit step`);
+    logWarning(
+      `${engine.name} exited with code ${result.exitCode} for audit step`,
+    );
   }
 
   if (!existsSync(REPORT_FILE)) {
@@ -296,7 +298,9 @@ async function runValidateStep(
   if (checkRateLimited(result)) return "rate-limited";
 
   if (!result.success) {
-    logWarning(`Claude exited with code ${result.exitCode} for validate step`);
+    logWarning(
+      `${engine.name} exited with code ${result.exitCode} for validate step`,
+    );
   }
 
   if (!existsSync(REPORT_FILE)) {
@@ -334,7 +338,7 @@ async function runFixStep(
   if (checkRateLimited(result)) return "rate-limited";
 
   if (!result.success) {
-    logWarning(`Claude exited with code ${result.exitCode} for fix step`);
+    logWarning(`${engine.name} exited with code ${result.exitCode} for fix step`);
   }
 
   if (!existsSync(REPORT_FILE)) {
