@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { mergeOptions, parseArgs } from "./cli/args.js";
+import { resolveAuditConfig } from "./cli/audit-config.js";
 import { auditLoop } from "./cli/commands/audit.js";
 import { migrateExceptions } from "./cli/commands/migrate.js";
 import { pruneExceptions } from "./cli/commands/prune.js";
@@ -28,19 +29,7 @@ async function main(): Promise<void> {
     }
 
     if (command === "audit") {
-      const auditConfig = { ...finalConfig };
-      if (auditOptions.engine) {
-        auditConfig.engine = auditOptions.engine;
-      }
-      if (auditOptions.model !== undefined) {
-        if (auditConfig.engine === "claude") {
-          auditConfig.claudeModel = auditOptions.model;
-        } else if (auditConfig.engine === "codex") {
-          auditConfig.codexModel = auditOptions.model;
-        } else {
-          auditConfig.ocPrimeModel = auditOptions.model;
-        }
-      }
+      const auditConfig = resolveAuditConfig(finalConfig, auditOptions);
 
       await auditLoop(auditConfig, {
         startStep: auditOptions.startStep ?? "audit",

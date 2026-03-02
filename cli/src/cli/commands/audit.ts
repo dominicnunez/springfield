@@ -12,7 +12,7 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import pc from "picocolors";
 import type { Config } from "../../config/loader.js";
-import { getWillieEffort, getWillieModel } from "../../config/loader.js";
+import { getCurrentModel, getWillieEffort } from "../../config/loader.js";
 import {
   DEFAULT_AUDIT_PROMPT,
   type Engine,
@@ -467,7 +467,7 @@ export async function auditLoop(
     mkdirSync(logDir, { recursive: true });
   }
 
-  const model = getWillieModel(config);
+  const model = getCurrentModel(config);
   const effort = getWillieEffort(config);
 
   let engine: Engine;
