@@ -4,7 +4,7 @@ import type { Config, EngineType } from "../config/loader.js";
 import { VERSION } from "../version.js";
 import type { AuditStep } from "./commands/audit.js";
 
-export type CommandType = "run" | "audit" | "migrate" | "prune";
+export type CommandType = "run" | "audit" | "prune";
 
 export interface CliOptions {
   engine?: EngineType;
@@ -183,13 +183,6 @@ export function parseArgs(argv: string[]): ParsedArgs {
         model: opts.model,
         verbose: opts.verbose,
       });
-    });
-
-  program
-    .command("migrate")
-    .description("Migrate audit/exceptions.md to audit/exceptions/ directory")
-    .action(() => {
-      resolvedCommand = "migrate";
     });
 
   program

@@ -330,7 +330,7 @@ Rules:
 1. Read the actual code at the referenced file:line
 2. Determine if the finding is FACTUALLY WRONG (false positive) or REAL
 3. A finding is a false positive ONLY if the audit misread the code, missed existing handling, or described behavior that doesn't actually occur
-4. A finding that is real but "minor" or "easy to fix" is NOT a false positive — keep it in the report
+4. A finding that is real but "minor", "broad", "low priority", "easy to fix", or "not worth this session" is NOT a false positive — keep it in the report
 5. Move only genuine false positives to audit/exceptions/misreads.md using this exact format:
 
 \`\`\`
@@ -343,10 +343,11 @@ Rules:
 \`\`\`
 
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
-6. Remove invalidated items from audit/report.md
-7. If ALL items are invalidated, delete audit/report.md entirely
-8. Do not reference finding IDs or category labels in commit messages
-9. For testing findings (missing coverage, cruft tests), verify the claim by reading the test files — confirm the gap actually exists or the test actually has the described problem. Do not rubber-stamp testing findings.`;
+6. If a finding describes a repo-controlled problem with a concrete remediation path in this codebase, it remains a real finding for the fix step unless it is factually wrong or correct by design
+7. For testing findings (missing coverage, cruft tests), verify the claim by reading the test files — confirm the gap actually exists or the test actually has the described problem. Weak or source-oriented tests are still real findings when the claimed weakness exists. Do not rubber-stamp testing findings.
+8. Remove invalidated items from audit/report.md
+9. If ALL items are invalidated, delete audit/report.md entirely
+10. Do not reference finding IDs or category labels in commit messages`;
 
 export interface FixPromptOptions {
   testCmd: string | undefined;
@@ -369,7 +370,7 @@ export function generateFixPrompt(options: FixPromptOptions): string {
     verifyInstructions = `7. No lint or test command detected — skip verification. If you know how to run them for this project, do so manually.`;
   }
 
-  return `Fix the issues in audit/report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to audit/exceptions.md.
+  return `Fix the issues in audit/report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to audit/exceptions/.
 
 Rules:
 1. Do proper long-term fixes, not quick-fix bandaids
@@ -378,6 +379,9 @@ Rules:
    - The finding requires architectural changes disproportionate to its severity, OR
    - There is a genuine design tradeoff where the current approach is defensible, OR
    - The finding is about external constraints you cannot change (transitive deps, upstream bugs)
+   - "Disproportionate for this session" alone is NOT enough
+   - If you can describe concrete code, test, config, or doc changes in this repo that would remediate the finding, do the fix instead of writing an exception
+   - Missing or weak tests, dead code, misleading comments, local config cleanup, validation gaps, and other repo-controlled maintenance work do NOT belong in risks.md
 4. When adding to exceptions, append to the correct file using this format:
 
 \`\`\`
@@ -390,7 +394,7 @@ Rules:
 \`\`\`
 
    Files in audit/exceptions/:
-   - risks.md — finding is real but genuinely not worth fixing
+   - risks.md — finding is real but not reasonably remediable in this repo because of upstream constraints, architecture cost, or a defensible design tradeoff
    - misreads.md — finding was factually wrong (should have been caught in validate step)
    - design.md — finding describes behavior that is correct by design
    Agents can create additional domain-specific files in the directory.

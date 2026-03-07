@@ -2,7 +2,6 @@
 import { mergeOptions, parseArgs } from "./cli/args.js";
 import { resolveAuditConfig } from "./cli/audit-config.js";
 import { auditLoop } from "./cli/commands/audit.js";
-import { migrateExceptions } from "./cli/commands/migrate.js";
 import { pruneExceptions } from "./cli/commands/prune.js";
 import { runLoop, runSingleTask } from "./cli/commands/run.js";
 import { loadConfig } from "./config/loader.js";
@@ -15,11 +14,6 @@ async function main(): Promise<void> {
     );
     const config = loadConfig();
     const finalConfig = mergeOptions(config, options);
-
-    if (command === "migrate") {
-      migrateExceptions();
-      return;
-    }
 
     if (command === "prune") {
       await pruneExceptions(finalConfig, {

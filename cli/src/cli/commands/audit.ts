@@ -90,6 +90,7 @@ ${ENTRY_FORMAT}
 const RISKS_TEMPLATE = `# Risks
 
 > Real findings consciously accepted — architectural cost, external constraints, disproportionate effort.
+> Not for deferred cleanup, "fix later", repo-local test improvements, or any finding with a straightforward remediation path in this codebase.
 > Managed by sfk willie. Follow the entry format below.
 ${ENTRY_FORMAT}
 `;

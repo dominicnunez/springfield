@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+
+cd cli || exit 1
+bun run typecheck || exit 1
+bun test

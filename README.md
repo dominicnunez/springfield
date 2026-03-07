@@ -233,7 +233,7 @@ If a rate limit is detected and `opencode-fallback` is configured, Ralph automat
 # Clone and install
 git clone https://github.com/dominicnunez/springfield.git
 cd springfield/cli
-npm install
+bun install
 
 # Run in dev mode
 npx tsx src/index.ts --help
@@ -241,6 +241,13 @@ npx tsx src/index.ts --help
 # Build binaries (requires Bun)
 bun run build:all
 ```
+
+Git hooks are installed by `bun install` in `cli/`.
+
+- `pre-commit` runs `bunx biome check --write src` and re-stages fixes
+- `pre-push` runs `bun run typecheck` and `bun test`
+
+If you use Nix, enter the shell first with `nix develop`, then run `cd cli && bun install`.
 
 ## Willie — Continuous Audit Loop
 
@@ -269,8 +276,8 @@ Willie resolves the audit prompt in this order:
 Each iteration runs three steps:
 
 1. **Audit** — Opus scans the codebase using the audit prompt, writes findings to `audit/report.md`
-2. **Validate** — Opus reads the actual code at each finding, moves false positives to `audit/exceptions.md`
-3. **Fix** — Opus applies proper long-term fixes, commits each one, deletes the report when done
+2. **Validate** — Opus reads the actual code at each finding and removes only true false positives or correct-by-design findings from the report
+3. **Fix** — Opus applies proper long-term fixes, commits each one, and uses `audit/exceptions/` only for genuine misreads, design decisions, or non-remediable risks
 
 The loop exits when an audit produces zero findings.
 
@@ -282,7 +289,7 @@ All audit artifacts live in the `audit/` directory:
 |------|-------------|
 | `audit/prompt.md` | Custom audit instructions (optional) |
 | `audit/report.md` | Generated findings |
-| `audit/exceptions.md` | Documented intentional tradeoffs and false positives |
+| `audit/exceptions/` | True exceptions only: `misreads.md`, `design.md`, and `risks.md` for upstream/design/architecture constraints |
 
 ## Legacy Config Migration
 

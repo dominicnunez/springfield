@@ -99,6 +99,20 @@ Override with `test-cmd` under `[ralph]` in config if needed.
 - Node.js 18+ or Bun
 - [OpenCode](https://opencode.ai), [Claude Code](https://docs.anthropic.com/en/docs/claude-code), and/or [Codex CLI](https://github.com/openai/codex)
 
+## Development Hooks
+
+From the repo root:
+
+```bash
+cd cli
+bun install
+```
+
+That installs Husky hooks for the repository:
+
+- `pre-commit` runs `bunx biome check --write src` and re-stages fixes
+- `pre-push` runs `bun run typecheck` and `bun test`
+
 ## Links
 
 - [Full Documentation](https://github.com/dominicnunez/ralph)

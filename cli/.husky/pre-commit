@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+
+cd cli || exit 1
+bunx biome check --write src || exit 1
+cd .. || exit 1
+git update-index --again
