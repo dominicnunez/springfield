@@ -107,6 +107,17 @@ describe("parseArgs", () => {
     expect(options.engine).toBe("codex");
   });
 
+  it("prefers engine shortcut flags over --engine for run", () => {
+    const { options } = parseArgs([
+      "node",
+      "sfk",
+      "--engine",
+      "opencode",
+      "--codex",
+    ]);
+    expect(options.engine).toBe("codex");
+  });
+
   it("parses --skip-commit flag", () => {
     const { options } = parseArgs(["node", "sfk", "--skip-commit"]);
     expect(options.skipCommit).toBe(true);
@@ -158,6 +169,18 @@ describe("parseArgs", () => {
       "codex",
     ]);
     expect(auditOptions.engine).toBe("codex");
+  });
+
+  it("prefers engine shortcut flags over --engine for audit", () => {
+    const { auditOptions } = parseArgs([
+      "node",
+      "sfk",
+      "audit",
+      "--engine",
+      "opencode",
+      "--claude",
+    ]);
+    expect(auditOptions.engine).toBe("claude");
   });
 
   it("parses audit --model override", () => {

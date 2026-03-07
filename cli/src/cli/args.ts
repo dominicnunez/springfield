@@ -1,5 +1,5 @@
 import { statSync } from "node:fs";
-import { Command } from "commander";
+import { Command, type OptionValues } from "commander";
 import type { Config, EngineType } from "../config/loader.js";
 import { VERSION } from "../version.js";
 import type { AuditStep } from "./commands/audit.js";
@@ -41,12 +41,58 @@ export interface ParsedArgs {
   pruneOptions: PruneCliOptions;
 }
 
+interface EngineOptionValues extends OptionValues {
+  engine?: string;
+  opencode?: boolean;
+  claude?: boolean;
+  codex?: boolean;
+  model?: string;
+}
+
 function isDirectory(path: string): boolean {
   try {
     return statSync(path).isDirectory();
   } catch {
     return false;
   }
+}
+
+function addEngineOptions(command: Command): Command {
+  return command
+    .option("--engine <type>", "AI engine to use: opencode, claude, or codex")
+    .option(
+      "--opencode",
+      "Use OpenCode engine (shortcut for --engine opencode)",
+    )
+    .option("--claude", "Use Claude Code engine (shortcut for --engine claude)")
+    .option("--codex", "Use Codex CLI engine (shortcut for --engine codex)")
+    .option("--model <name>", "Override the model for the selected engine");
+}
+
+function resolveSelectedEngine(
+  opts: EngineOptionValues,
+): EngineType | undefined {
+  if (opts.claude) {
+    return "claude";
+  }
+
+  if (opts.codex) {
+    return "codex";
+  }
+
+  if (opts.opencode) {
+    return "opencode";
+  }
+
+  if (
+    opts.engine === "claude" ||
+    opts.engine === "opencode" ||
+    opts.engine === "codex"
+  ) {
+    return opts.engine;
+  }
+
+  return undefined;
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -63,18 +109,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
     .version(VERSION);
 
   // Default "run" command (also handles bare `sfk "task"` and `sfk`)
-  program
-    .command("run", { isDefault: true })
+  addEngineOptions(program.command("run", { isDefault: true }))
     .description("Run the ralph coding loop (default)")
     .argument("[task]", "Single task to run (non-directory positional)")
-    .option("--engine <type>", "AI engine to use: opencode, claude, or codex")
-    .option(
-      "--opencode",
-      "Use OpenCode engine (shortcut for --engine opencode)",
-    )
-    .option("--claude", "Use Claude Code engine (shortcut for --engine claude)")
-    .option("--codex", "Use Codex CLI engine (shortcut for --engine codex)")
-    .option("--model <name>", "Override the model for the selected engine")
     .option(
       "--max-iterations <n>",
       "Maximum iterations (-1 for infinite)",
@@ -91,26 +128,11 @@ export function parseArgs(argv: string[]): ParsedArgs {
     .option("--prd <path>", "Path to PRD.md file")
     .option("--audit-after", "Run willie audit after all PRD tasks complete")
     .option("-v, --verbose", "Enable verbose output")
-    .action((task, opts) => {
+    .action((task, opts: EngineOptionValues & OptionValues) => {
       resolvedCommand = "run";
 
-      let engine: EngineType | undefined;
-      if (opts.claude) {
-        engine = "claude";
-      } else if (opts.codex) {
-        engine = "codex";
-      } else if (opts.opencode) {
-        engine = "opencode";
-      } else if (
-        opts.engine === "claude" ||
-        opts.engine === "opencode" ||
-        opts.engine === "codex"
-      ) {
-        engine = opts.engine;
-      }
-
       Object.assign(cliOptions, {
-        engine,
+        engine: resolveSelectedEngine(opts),
         model: opts.model,
         maxIterations: opts.maxIterations,
         sleepSeconds: opts.sleep,
@@ -125,17 +147,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
     });
 
   // Audit command
-  program
-    .command("audit")
+  addEngineOptions(program.command("audit"))
     .description("Run the willie audit loop")
-    .option("--engine <type>", "AI engine to use: opencode, claude, or codex")
-    .option(
-      "--opencode",
-      "Use OpenCode engine (shortcut for --engine opencode)",
-    )
-    .option("--claude", "Use Claude Code engine (shortcut for --engine claude)")
-    .option("--codex", "Use Codex CLI engine (shortcut for --engine codex)")
-    .option("--model <name>", "Override the model for the selected engine")
     .option(
       "--step <step>",
       "Start from step: audit, validate, or fix",
@@ -149,7 +162,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     .option("--audit-prompt <path>", "Path to custom audit prompt file")
     .option("--lint-cmd <cmd>", "Custom lint command for fix step")
     .option("-v, --verbose", "Enable verbose output")
-    .action((opts) => {
+    .action((opts: EngineOptionValues & OptionValues) => {
       resolvedCommand = "audit";
 
       const step = opts.step as AuditStep;
@@ -159,27 +172,12 @@ export function parseArgs(argv: string[]): ParsedArgs {
         );
       }
 
-      let engine: EngineType | undefined;
-      if (opts.claude) {
-        engine = "claude";
-      } else if (opts.codex) {
-        engine = "codex";
-      } else if (opts.opencode) {
-        engine = "opencode";
-      } else if (
-        opts.engine === "claude" ||
-        opts.engine === "opencode" ||
-        opts.engine === "codex"
-      ) {
-        engine = opts.engine;
-      }
-
       Object.assign(auditCliOptions, {
         startStep: step,
         maxIterations: opts.maxIterations,
         auditPrompt: opts.auditPrompt,
         lintCmd: opts.lintCmd,
-        engine,
+        engine: resolveSelectedEngine(opts),
         model: opts.model,
         verbose: opts.verbose,
       });

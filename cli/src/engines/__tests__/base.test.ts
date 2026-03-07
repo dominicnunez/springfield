@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { EXCEPTION_FILE_DESCRIPTIONS } from "../../cli/exception-format.js";
 import { generateFixPrompt, VALIDATE_PROMPT } from "../base.js";
 
 describe("Willie audit prompts", () => {
@@ -27,7 +28,13 @@ describe("Willie audit prompts", () => {
       "Missing or weak tests, dead code, misleading comments, local config cleanup, validation gaps, and other repo-controlled maintenance work do NOT belong in risks.md",
     );
     expect(prompt).toContain(
-      "risks.md — finding is real but not reasonably remediable in this repo because of upstream constraints, architecture cost, or a defensible design tradeoff",
+      `risks.md — ${EXCEPTION_FILE_DESCRIPTIONS["risks.md"]}`,
+    );
+    expect(prompt).toContain(
+      `misreads.md — ${EXCEPTION_FILE_DESCRIPTIONS["misreads.md"]}`,
+    );
+    expect(prompt).toContain(
+      `design.md — ${EXCEPTION_FILE_DESCRIPTIONS["design.md"]}`,
     );
   });
 });

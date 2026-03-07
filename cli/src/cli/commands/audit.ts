@@ -36,6 +36,7 @@ import {
   logSuccess,
   logWarning,
 } from "../../ui/logger.js";
+import { EXCEPTION_FILE_TEMPLATES } from "../exception-format.js";
 import { parseExceptionFile } from "./prune.js";
 
 // ─────────────────────────────────────────────────────────────
@@ -72,35 +73,6 @@ const ENGINE_CLI_NAMES: Record<string, string> = {
   codex: "Codex CLI",
   opencode: "OpenCode CLI",
 };
-
-const ENTRY_FORMAT = `>
-> Entry format:
-> ### Plain language description
-> **Location:** \`file/path:line\` — optional context
-> **Date:** YYYY-MM-DD
-> **Reason:** Explanation (can be multiple lines)`;
-
-const MISREADS_TEMPLATE = `# Misreads
-
-> Findings where the audit misread the code or described behavior that doesn't occur.
-> Managed by sfk willie. Follow the entry format below.
-${ENTRY_FORMAT}
-`;
-
-const RISKS_TEMPLATE = `# Risks
-
-> Real findings consciously accepted — architectural cost, external constraints, disproportionate effort.
-> Not for deferred cleanup, "fix later", repo-local test improvements, or any finding with a straightforward remediation path in this codebase.
-> Managed by sfk willie. Follow the entry format below.
-${ENTRY_FORMAT}
-`;
-
-const DESIGN_TEMPLATE = `# Design
-
-> Findings that describe behavior which is correct by design.
-> Managed by sfk willie. Follow the entry format below.
-${ENTRY_FORMAT}
-`;
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -144,9 +116,18 @@ function ensureAuditDir(): void {
   }
   if (!existsSync(EXCEPTIONS_DIR)) {
     mkdirSync(EXCEPTIONS_DIR, { recursive: true });
-    writeFileSync(join(EXCEPTIONS_DIR, "misreads.md"), MISREADS_TEMPLATE);
-    writeFileSync(join(EXCEPTIONS_DIR, "risks.md"), RISKS_TEMPLATE);
-    writeFileSync(join(EXCEPTIONS_DIR, "design.md"), DESIGN_TEMPLATE);
+    writeFileSync(
+      join(EXCEPTIONS_DIR, "misreads.md"),
+      EXCEPTION_FILE_TEMPLATES["misreads.md"],
+    );
+    writeFileSync(
+      join(EXCEPTIONS_DIR, "risks.md"),
+      EXCEPTION_FILE_TEMPLATES["risks.md"],
+    );
+    writeFileSync(
+      join(EXCEPTIONS_DIR, "design.md"),
+      EXCEPTION_FILE_TEMPLATES["design.md"],
+    );
     logInfo("Created audit/exceptions/ with template files");
   }
 }

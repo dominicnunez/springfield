@@ -244,8 +244,8 @@ bun run build:all
 
 Git hooks are installed by `bun install` in `cli/`.
 
-- `pre-commit` runs `bunx biome check --write src` and re-stages fixes
-- `pre-push` runs `bun run typecheck` and `bun test`
+- `pre-commit` runs `bun run hook:pre-commit`
+- `pre-push` runs `bun run hook:pre-push`
 
 If you use Nix, enter the shell first with `nix develop`, then run `cd cli && bun install`.
 

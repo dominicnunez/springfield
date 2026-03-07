@@ -24,7 +24,6 @@ describe("parseExceptionFile", () => {
       "### Hardcoded timeout in retry loop",
       "",
       "**Location:** `src/retry.ts:42` — retry handler",
-      "**Date:** 2025-01-15",
       "",
       "**Reason:** Timeout is intentional for rate limiting.",
     ].join("\n");
@@ -43,8 +42,6 @@ describe("parseExceptionFile", () => {
       "",
       "### General architecture concern",
       "",
-      "**Date:** 2025-02-01",
-      "",
       "**Reason:** This is a design choice.",
     ].join("\n");
 
@@ -62,7 +59,6 @@ describe("parseExceptionFile", () => {
       "### Complex design choice",
       "",
       "**Location:** `lib/core.ts:10`",
-      "**Date:** 2025-03-01",
       "",
       "**Reason:** First line of reason.",
       "Second line continues the explanation.",
@@ -74,6 +70,26 @@ describe("parseExceptionFile", () => {
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0].rawText).toContain("Second line continues");
     expect(result.entries[0].rawText).toContain("Third line wraps up.");
+  });
+
+  test("tolerates older entries that still include a Date field", () => {
+    const content = [
+      "# Risks",
+      "",
+      "### Legacy entry",
+      "",
+      "**Location:** `src/legacy.ts:12`",
+      "**Date:** 2025-01-15",
+      "",
+      "**Reason:** Legacy format remains parseable.",
+    ].join("\n");
+
+    const result = parseExceptionFile("audit/exceptions/risks.md", content);
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0].heading).toBe("Legacy entry");
+    expect(result.entries[0].location).toBe("src/legacy.ts");
+    expect(result.entries[0].rawText).toContain("**Date:** 2025-01-15");
   });
 
   test("parses multiple entries from one file", () => {

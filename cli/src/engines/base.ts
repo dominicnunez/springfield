@@ -1,3 +1,9 @@
+import {
+  EXCEPTION_FALSE_POSITIVE_EXAMPLE,
+  EXCEPTION_FILE_DESCRIPTIONS,
+  EXCEPTION_REASON_EXAMPLE,
+} from "../cli/exception-format.js";
+
 export interface EngineResult {
   success: boolean;
   output: string;
@@ -21,6 +27,11 @@ export interface Engine {
 export const COMPLETE_MARKER = "<promise>COMPLETE</promise>";
 
 const FIX_TESTS_PROMPT_MAX_LINES = 100;
+const EXCEPTION_FILE_GUIDANCE = [
+  `   - risks.md — ${EXCEPTION_FILE_DESCRIPTIONS["risks.md"]}`,
+  `   - misreads.md — ${EXCEPTION_FILE_DESCRIPTIONS["misreads.md"]}`,
+  `   - design.md — ${EXCEPTION_FILE_DESCRIPTIONS["design.md"]}`,
+].join("\n");
 
 const COMMIT_STANDARD = `## Commit Message Standard
 
@@ -334,12 +345,7 @@ Rules:
 5. Move only genuine false positives to audit/exceptions/misreads.md using this exact format:
 
 \`\`\`
-### Plain language description of the finding
-
-**Location:** \`file/path:line\` — optional context
-**Date:** YYYY-MM-DD
-
-**Reason:** Why this is a false positive. Can be multiple lines.
+${EXCEPTION_FALSE_POSITIVE_EXAMPLE}
 \`\`\`
 
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
@@ -385,18 +391,11 @@ Rules:
 4. When adding to exceptions, append to the correct file using this format:
 
 \`\`\`
-### Plain language description of the finding
-
-**Location:** \`file/path:line\` — optional context
-**Date:** YYYY-MM-DD
-
-**Reason:** Why this is excepted. Can be multiple lines.
+${EXCEPTION_REASON_EXAMPLE}
 \`\`\`
 
    Files in audit/exceptions/:
-   - risks.md — finding is real but not reasonably remediable in this repo because of upstream constraints, architecture cost, or a defensible design tradeoff
-   - misreads.md — finding was factually wrong (should have been caught in validate step)
-   - design.md — finding describes behavior that is correct by design
+${EXCEPTION_FILE_GUIDANCE}
    Agents can create additional domain-specific files in the directory.
    If any exceptions file exceeds ~80 entries, split it into domain-specific files
    (e.g. risks.md → risks-auth.md + risks-deps.md). Move entries — don't duplicate.
