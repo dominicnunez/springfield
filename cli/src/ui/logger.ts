@@ -46,7 +46,8 @@ function writeToLogFile(level: string, message: string): void {
 }
 
 export function logInfo(message: string): void {
-  console.log(message);
+  const formatted = /^Step \d+:/.test(message) ? pc.green(message) : message;
+  console.log(formatted);
   writeToLogFile("INFO", message);
 }
 

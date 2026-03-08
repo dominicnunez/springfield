@@ -1,4 +1,3 @@
-import pc from "picocolors";
 import type { Engine } from "../engines/base.js";
 import { logWarning } from "../ui/logger.js";
 

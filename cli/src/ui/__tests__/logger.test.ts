@@ -59,6 +59,18 @@ describe("logger", () => {
       spy.mockRestore();
     });
 
+    test("logInfo writes step-prefixed messages in green", () => {
+      const spy = spyOn(console, "log").mockImplementation(() => {});
+      try {
+        logInfo("Step 1: Running audit...");
+        expect(spy).toHaveBeenCalled();
+        const call = spy.mock.calls[0][0];
+        expect(call).toContain("Step 1: Running audit...");
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     test("logSuccess writes green text to console", () => {
       const spy = spyOn(console, "log").mockImplementation(() => {});
       logSuccess("success message");
