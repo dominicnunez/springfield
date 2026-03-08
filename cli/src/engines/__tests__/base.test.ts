@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { EXCEPTION_FILE_DESCRIPTIONS } from "../../cli/exception-format.js";
-import { generateFixPrompt, VALIDATE_PROMPT } from "../base.js";
+import { generateFixPrompt, generatePrompt, VALIDATE_PROMPT } from "../base.js";
 
 describe("Willie audit prompts", () => {
   test("validate prompt keeps repo-controlled findings in the report", () => {
@@ -35,6 +35,28 @@ describe("Willie audit prompts", () => {
     );
     expect(prompt).toContain(
       `design.md — ${EXCEPTION_FILE_DESCRIPTIONS["design.md"]}`,
+    );
+  });
+
+  test("ralph prompt defines plain prose conventional commit bodies", () => {
+    const prompt = generatePrompt({
+      skipCommit: false,
+      progressFile: "/tmp/progress.md",
+    });
+
+    expect(prompt).toContain("<type>!: <subject>");
+    expect(prompt).toContain("<type>(<scope>)!: <subject>");
+    expect(prompt).toContain(
+      "[optional body — plain prose only, wrapped across multiple lines when long]",
+    );
+    expect(prompt).toContain(
+      "Body text must be plain prose, not labeled sections like `Why:`, `What:`, or `Notes:`",
+    );
+    expect(prompt).toContain(
+      "Wrap longer bodies across multiple short lines instead of one long line",
+    );
+    expect(prompt).toContain(
+      "Use a `BREAKING CHANGE:` footer when migration detail is needed",
     );
   });
 });

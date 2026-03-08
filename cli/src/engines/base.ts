@@ -40,8 +40,13 @@ Use conventional commits. Lowercase type, imperative mood, concise subject line.
 Format:
 \`\`\`
 <type>: <subject>
+<type>(<scope>): <subject>
+<type>!: <subject>
+<type>(<scope>)!: <subject>
 
-[optional body — explain WHY, not what]
+[optional body — plain prose only, wrapped across multiple lines when long]
+
+[optional BREAKING CHANGE: footer]
 \`\`\`
 
 Types:
@@ -56,7 +61,11 @@ Types:
 
 Rules:
 - Subject line: lowercase, imperative mood, no period, max ~72 chars
-- Add a body (separated by blank line) when the "why" isn't obvious from the subject
+- Use \`!\` for breaking changes in the subject when applicable
+- Add a body (separated by a blank line) only when the subject is not enough
+- Body text must be plain prose, not labeled sections like \`Why:\`, \`What:\`, or \`Notes:\`
+- Wrap longer bodies across multiple short lines instead of one long line
+- Use a \`BREAKING CHANGE:\` footer when migration detail is needed
 - One concern per commit — two things = two commits
 - Do NOT add Co-Authored-By or AI attribution
 - Do NOT reference audit report IDs, finding numbers, or internal file paths`;

@@ -247,6 +247,10 @@ Git hooks are installed by `bun install` in `cli/`.
 - `pre-commit` runs `bun run hook:pre-commit`
 - `pre-push` runs `bun run hook:pre-push`
 
+Commit messages should use conventional commits. Bodies are optional; when
+present, write them as plain prose, wrap longer explanations across multiple
+lines, use `!` for breaking changes, and avoid labels like `Why:`.
+
 If you use Nix, enter the shell first with `nix develop`, then run `cd cli && bun install`.
 
 ## Willie — Continuous Audit Loop
