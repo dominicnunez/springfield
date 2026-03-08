@@ -4,6 +4,7 @@ import {
   readdirSync,
   readFileSync,
   unlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import pc from "picocolors";
@@ -26,7 +27,7 @@ import { AUDIT_EXCEPTIONS_DIR, AUDIT_REPORT_FILE } from "../audit-paths.js";
 import { initializeAuditSession } from "../audit-session.js";
 import { switchToFallbackWithNotice } from "../engine-fallback.js";
 import { notify } from "../notify.js";
-import { parseExceptionFile } from "./prune.js";
+import { type ExceptionEntry, parseExceptionFile } from "./prune.js";
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -38,6 +39,22 @@ const STEP_ORDER: AuditStep[] = ["audit", "validate", "fix"];
 
 interface SoftLimitState {
   retries: number;
+}
+
+export interface AuditFinding {
+  category: string;
+  title: string;
+  severity: string;
+  file: string;
+  details: string;
+  suggestedFix: string;
+  rawText: string;
+}
+
+export interface ReportFilterResult {
+  originalCount: number;
+  suppressedCount: number;
+  remainingCount: number;
 }
 
 type PipelineSignal = "continue" | "stop" | "retry" | "abort";
@@ -76,33 +93,185 @@ function countFindings(reportPath: string): number {
   return 0;
 }
 
-function extractFindingFiles(reportPath: string): Set<string> {
-  if (!existsSync(reportPath)) return new Set();
-  const content = readFileSync(reportPath, "utf-8");
-  const files = new Set<string>();
-  for (const match of content.matchAll(/^- \*\*File\*\*:\s*(\S+)/gm)) {
-    files.add(match[1].split(":")[0]);
+export function parseAuditReport(content: string): AuditFinding[] {
+  const trimmed = content.trim();
+  if (!trimmed) return [];
+
+  const blocks = trimmed.split(/\n(?=### )/g).filter(Boolean);
+  const findings: AuditFinding[] = [];
+
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    const headingMatch = lines[0].match(/^### \[([^\]]+)\]\s+(.+)$/);
+    if (!headingMatch) continue;
+
+    const severity = extractReportField(block, "Severity");
+    const file = normalizeFilePath(extractReportField(block, "File"));
+    const details = extractReportField(block, "Details");
+    const suggestedFix = extractReportField(block, "Suggested fix");
+
+    if (!severity || !file || !details || !suggestedFix) continue;
+
+    findings.push({
+      category: headingMatch[1].trim(),
+      title: headingMatch[2].trim(),
+      severity,
+      file,
+      details,
+      suggestedFix,
+      rawText: block.trim(),
+    });
   }
-  return files;
+
+  return findings;
 }
 
-function readMatchingExceptions(findingFiles: Set<string>): string {
-  if (!existsSync(AUDIT_EXCEPTIONS_DIR) || findingFiles.size === 0) return "";
+function extractReportField(block: string, field: string): string {
+  const match = block.match(
+    new RegExp(`^- \\*\\*${escapeRegExp(field)}\\*\\*:\\s*(.+)$`, "m"),
+  );
+  return match?.[1]?.trim() ?? "";
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeFilePath(file: string): string {
+  return file.split(":")[0].trim();
+}
+
+function loadExceptionEntries(): ExceptionEntry[] {
+  if (!existsSync(AUDIT_EXCEPTIONS_DIR)) return [];
   const mdFiles = readdirSync(AUDIT_EXCEPTIONS_DIR)
     .filter((f) => f.endsWith(".md"))
     .sort();
-  const matched: string[] = [];
+  const entries: ExceptionEntry[] = [];
   for (const file of mdFiles) {
     const filePath = join(AUDIT_EXCEPTIONS_DIR, file);
     const content = readFileSync(filePath, "utf-8").trim();
     const parsed = parseExceptionFile(filePath, content);
-    for (const entry of parsed.entries) {
-      if (entry.location && findingFiles.has(entry.location)) {
-        matched.push(entry.rawText);
-      }
-    }
+    entries.push(...parsed.entries);
   }
+  return entries;
+}
+
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[`*_#[\](){}:;,.!?/-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenize(value: string): string[] {
+  return normalizeText(value)
+    .split(" ")
+    .filter((token) => token.length > 2);
+}
+
+function textSimilar(a: string, b: string): boolean {
+  const normalizedA = normalizeText(a);
+  const normalizedB = normalizeText(b);
+  if (!normalizedA || !normalizedB) return false;
+
+  const shorter =
+    normalizedA.length <= normalizedB.length ? normalizedA : normalizedB;
+  const longer = shorter === normalizedA ? normalizedB : normalizedA;
+  if (shorter.length >= 12 && longer.includes(shorter)) return true;
+
+  const tokensA = new Set(tokenize(a));
+  const tokensB = new Set(tokenize(b));
+  if (tokensA.size === 0 || tokensB.size === 0) return false;
+
+  let overlap = 0;
+  for (const token of tokensA) {
+    if (tokensB.has(token)) overlap++;
+  }
+
+  const shorterSize = Math.min(tokensA.size, tokensB.size);
+  return overlap >= 3 && overlap / shorterSize >= 0.6;
+}
+
+export function findMatchingException(
+  finding: AuditFinding,
+  entries: ExceptionEntry[] = loadExceptionEntries(),
+): ExceptionEntry | undefined {
+  return entries.find((entry) => {
+    if (!entry.location) return false;
+    if (normalizeFilePath(entry.location) !== finding.file) return false;
+
+    return (
+      textSimilar(finding.title, entry.heading) ||
+      textSimilar(finding.details, entry.heading) ||
+      textSimilar(finding.title, entry.rawText) ||
+      textSimilar(finding.details, entry.rawText)
+    );
+  });
+}
+
+function rebuildAuditReport(findings: AuditFinding[]): string {
+  return `${findings.map((finding) => finding.rawText).join("\n\n")}\n`;
+}
+
+function collectExceptionsForFindingFiles(findingFiles: Set<string>): string {
+  if (findingFiles.size === 0) return "";
+  const matched = loadExceptionEntries()
+    .filter((entry) => entry.location && findingFiles.has(entry.location))
+    .map((entry) => entry.rawText);
+
   return matched.join("\n\n");
+}
+
+export function applyExceptionFilterToReport(): ReportFilterResult {
+  if (!existsSync(AUDIT_REPORT_FILE)) {
+    return { originalCount: 0, suppressedCount: 0, remainingCount: 0 };
+  }
+
+  const content = readFileSync(AUDIT_REPORT_FILE, "utf-8");
+  const findings = parseAuditReport(content);
+  if (findings.length === 0) {
+    return { originalCount: 0, suppressedCount: 0, remainingCount: 0 };
+  }
+
+  const entries = loadExceptionEntries();
+  const remainingFindings = findings.filter(
+    (finding) => !findMatchingException(finding, entries),
+  );
+
+  if (remainingFindings.length === 0) {
+    unlinkSync(AUDIT_REPORT_FILE);
+  } else if (remainingFindings.length !== findings.length) {
+    writeFileSync(AUDIT_REPORT_FILE, rebuildAuditReport(remainingFindings));
+  }
+
+  return {
+    originalCount: findings.length,
+    suppressedCount: findings.length - remainingFindings.length,
+    remainingCount: remainingFindings.length,
+  };
+}
+
+export function buildAuditPromptWithExceptions(auditPrompt: string): string {
+  const instructions = [
+    "Before writing audit/report.md, inspect audit/exceptions/*.md as needed and compare each candidate finding against relevant exception entries.",
+    "Read only the exception files and entries needed to rule in or rule out a candidate finding; do not ignore the directory, but avoid loading unrelated exception content.",
+    "Do not write findings that are already covered by an existing exception unless the exception is clearly stale because the code has materially changed.",
+    "If an exception still applies, suppress that finding instead of re-reporting it.",
+  ].join(" ");
+  if (!existsSync(AUDIT_EXCEPTIONS_DIR)) {
+    return `${auditPrompt}\n\n${instructions}`;
+  }
+
+  const mdFiles = readdirSync(AUDIT_EXCEPTIONS_DIR)
+    .filter((f) => f.endsWith(".md"))
+    .sort();
+  const exceptionFileList =
+    mdFiles.length > 0
+      ? mdFiles.map((file) => join(AUDIT_EXCEPTIONS_DIR, file)).join("\n")
+      : `${AUDIT_EXCEPTIONS_DIR}/*.md`;
+
+  return `${auditPrompt}\n\n${instructions}\n\nKnown exception files:\n${exceptionFileList}`;
 }
 
 function logToFile(
@@ -143,7 +312,8 @@ async function runAuditStep(
 ): Promise<AuditStepOutput> {
   logInfo("Step 1: Running audit...");
 
-  const result = await engine.run(auditPrompt);
+  const prompt = buildAuditPromptWithExceptions(auditPrompt);
+  const result = await engine.run(prompt);
   logToFile(logDir, iter, "audit", result.output);
 
   if (checkRateLimited(result))
@@ -167,10 +337,29 @@ async function runAuditStep(
     return { result: "stop", matchedExceptions: "" };
   }
 
-  logInfo(`Audit found ${findingCount} issue(s).`);
+  const filterResult = applyExceptionFilterToReport();
+  logInfo(`Audit found ${filterResult.originalCount} issue(s).`);
+  if (filterResult.suppressedCount > 0) {
+    logInfo(
+      `Suppressed ${filterResult.suppressedCount} finding(s) already covered by exceptions.`,
+    );
+  }
 
-  const findingFiles = extractFindingFiles(AUDIT_REPORT_FILE);
-  const matchedExceptions = readMatchingExceptions(findingFiles);
+  if (filterResult.remainingCount === 0) {
+    logSuccess("All audit findings were already covered by exceptions.");
+    return { result: "stop", matchedExceptions: "" };
+  }
+
+  logInfo(
+    `${filterResult.remainingCount} issue(s) remain after exception filtering.`,
+  );
+
+  const findingFiles = new Set(
+    parseAuditReport(readFileSync(AUDIT_REPORT_FILE, "utf-8")).map(
+      (finding) => finding.file,
+    ),
+  );
+  const matchedExceptions = collectExceptionsForFindingFiles(findingFiles);
 
   return { result: "continue", matchedExceptions };
 }

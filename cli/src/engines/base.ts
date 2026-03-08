@@ -342,7 +342,8 @@ The format is critical: "### [Category]" with brackets, then severity/file/detai
    - Untested error handling, security boundaries, and data validation (not every uncovered branch — focus on paths where a bug would cause real damage)
    - Cruft tests that test implementation details instead of behavior (mocking internals, asserting on log output, snapshot tests of serialization formats)
    - Tests that pass but verify nothing meaningful (empty assertions, tautologies, verbatim duplicates of other tests)
-   - Stale tests that reference removed or renamed code`;
+   - Stale tests that reference removed or renamed code
+7. Before writing audit/report.md, inspect audit/exceptions/*.md as needed and compare each candidate finding against relevant exception entries. Read only the exception files and entries needed to rule in or rule out that finding. Do not re-report findings that are already covered by a still-applicable exception.`;
 
 export const VALIDATE_PROMPT = `Review and validate or invalidate each item in audit/report.md. Be thorough — actually read the code at every referenced file:line. Do not just trust the audit description.
 

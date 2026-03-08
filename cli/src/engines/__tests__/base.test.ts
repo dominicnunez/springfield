@@ -1,8 +1,25 @@
 import { describe, expect, test } from "bun:test";
 import { EXCEPTION_FILE_DESCRIPTIONS } from "../../cli/exception-format.js";
-import { generateFixPrompt, generatePrompt, VALIDATE_PROMPT } from "../base.js";
+import {
+  DEFAULT_AUDIT_PROMPT,
+  generateFixPrompt,
+  generatePrompt,
+  VALIDATE_PROMPT,
+} from "../base.js";
 
 describe("Willie audit prompts", () => {
+  test("audit prompt checks exceptions before writing the report", () => {
+    expect(DEFAULT_AUDIT_PROMPT).toContain(
+      "Before writing audit/report.md, inspect audit/exceptions/*.md as needed and compare each candidate finding against relevant exception entries.",
+    );
+    expect(DEFAULT_AUDIT_PROMPT).toContain(
+      "Read only the exception files and entries needed to rule in or rule out that finding.",
+    );
+    expect(DEFAULT_AUDIT_PROMPT).toContain(
+      "Do not re-report findings that are already covered by a still-applicable exception.",
+    );
+  });
+
   test("validate prompt keeps repo-controlled findings in the report", () => {
     expect(VALIDATE_PROMPT).toContain(
       "If a finding describes a repo-controlled problem with a concrete remediation path in this codebase, it remains a real finding for the fix step",

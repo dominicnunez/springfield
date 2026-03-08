@@ -279,7 +279,7 @@ Willie resolves the audit prompt in this order:
 
 Each iteration runs three steps:
 
-1. **Audit** — Opus scans the codebase using the audit prompt, writes findings to `audit/report.md`
+1. **Audit** — Opus scans the codebase using the audit prompt, may consult `audit/exceptions/*.md` selectively, and SFK filters any still-matching exceptions out of `audit/report.md` before validation
 2. **Validate** — Opus reads the actual code at each finding and removes only true false positives or correct-by-design findings from the report
 3. **Fix** — Opus applies proper long-term fixes, commits each one, and uses `audit/exceptions/` only for genuine misreads, design decisions, or non-remediable risks
 
