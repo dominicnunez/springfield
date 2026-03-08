@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { runGitLines } from "../cli/git.js";
 import { logWarning, printDivider } from "../ui/logger.js";
 
 // Test file patterns
@@ -141,73 +142,28 @@ function isTestFile(filename: string): boolean {
 export function getChangedTestFiles(): string[] {
   const testFiles: Set<string> = new Set();
 
-  // Check unstaged changes
-  const unstaged = spawnSync("git", ["diff", "--name-only", "HEAD"], {
-    encoding: "utf-8",
-    cwd: process.cwd(),
-  });
-
-  if (unstaged.error) {
-    logWarning(`git diff failed: ${unstaged.error.message}`);
-  } else if (unstaged.stdout) {
-    for (const file of unstaged.stdout.split("\n")) {
-      if (file && isTestFile(file)) {
-        testFiles.add(file);
-      }
-    }
-  }
-
-  // Check staged changes
-  const staged = spawnSync("git", ["diff", "--cached", "--name-only"], {
-    encoding: "utf-8",
-    cwd: process.cwd(),
-  });
-
-  if (staged.error) {
-    logWarning(`git diff --cached failed: ${staged.error.message}`);
-  } else if (staged.stdout) {
-    for (const file of staged.stdout.split("\n")) {
-      if (file && isTestFile(file)) {
-        testFiles.add(file);
-      }
-    }
-  }
-
-  // Check last commit (in case AI already committed)
-  const lastCommit = spawnSync(
-    "git",
-    ["diff", "--name-only", "HEAD~1", "HEAD"],
+  const gitSources = [
     {
-      encoding: "utf-8",
-      cwd: process.cwd(),
+      args: ["diff", "--name-only", "HEAD"],
+      warningLabel: "git diff",
     },
-  );
-
-  if (lastCommit.error) {
-    logWarning(`git diff HEAD~1 HEAD failed: ${lastCommit.error.message}`);
-  } else if (lastCommit.stdout && lastCommit.status === 0) {
-    for (const file of lastCommit.stdout.split("\n")) {
-      if (file && isTestFile(file)) {
-        testFiles.add(file);
-      }
-    }
-  }
-
-  // Check untracked files (new tests not yet staged)
-  const untracked = spawnSync(
-    "git",
-    ["ls-files", "--others", "--exclude-standard"],
     {
-      encoding: "utf-8",
-      cwd: process.cwd(),
+      args: ["diff", "--cached", "--name-only"],
+      warningLabel: "git diff --cached",
     },
-  );
+    {
+      args: ["diff", "--name-only", "HEAD~1", "HEAD"],
+      warningLabel: "git diff HEAD~1 HEAD",
+    },
+    {
+      args: ["ls-files", "--others", "--exclude-standard"],
+      warningLabel: "git ls-files --others",
+    },
+  ] as const;
 
-  if (untracked.error) {
-    logWarning(`git ls-files --others failed: ${untracked.error.message}`);
-  } else if (untracked.stdout) {
-    for (const file of untracked.stdout.split("\n")) {
-      if (file && isTestFile(file)) {
+  for (const source of gitSources) {
+    for (const file of runGitLines(source.args, source.warningLabel)) {
+      if (isTestFile(file)) {
         testFiles.add(file);
       }
     }

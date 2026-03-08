@@ -1,28 +1,20 @@
 import {
   appendFileSync,
   existsSync,
-  mkdirSync,
   readdirSync,
   readFileSync,
   unlinkSync,
 } from "node:fs";
-import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import pc from "picocolors";
 import type { Config } from "../../config/loader.js";
-import { getWillieEffort, getWillieModel } from "../../config/loader.js";
 import {
   DEFAULT_AUDIT_PROMPT,
   type Engine,
   type EngineResult,
-  generateFixPrompt,
   VALIDATE_PROMPT,
 } from "../../engines/base.js";
 import { handleSoftRateLimit } from "../../engines/rate-limit.js";
-import {
-  detectLintCommand,
-  detectTestCommand,
-} from "../../tasks/verification.js";
 import {
   formatDivider,
   logError,
@@ -30,14 +22,8 @@ import {
   logSuccess,
   logWarning,
 } from "../../ui/logger.js";
-import {
-  AUDIT_DIR,
-  AUDIT_EXCEPTIONS_DIR,
-  AUDIT_PROMPT_FILE,
-  AUDIT_REPORT_FILE,
-  ensureAuditDirectories,
-} from "../audit-paths.js";
-import { createWillieEngine, getEngineInstallName } from "../engine-factory.js";
+import { AUDIT_EXCEPTIONS_DIR, AUDIT_REPORT_FILE } from "../audit-paths.js";
+import { initializeAuditSession } from "../audit-session.js";
 import { switchToFallbackWithNotice } from "../engine-fallback.js";
 import { notify } from "../notify.js";
 import { parseExceptionFile } from "./prune.js";
@@ -131,36 +117,6 @@ function logToFile(
   } catch (err) {
     logWarning(`Failed to write log to ${logFile}: ${err}`);
   }
-}
-
-interface ResolvedPrompt {
-  text: string;
-  source: string;
-}
-
-function resolveAuditPrompt(
-  auditPromptPath: string | undefined,
-): ResolvedPrompt {
-  if (auditPromptPath && existsSync(auditPromptPath)) {
-    return {
-      text: readFileSync(auditPromptPath, "utf-8"),
-      source: auditPromptPath,
-    };
-  }
-
-  if (existsSync(AUDIT_PROMPT_FILE)) {
-    return {
-      text: readFileSync(AUDIT_PROMPT_FILE, "utf-8"),
-      source: AUDIT_PROMPT_FILE,
-    };
-  }
-
-  const globalPrompt = join(homedir(), ".config", "sfk", "audit-prompt.md");
-  if (existsSync(globalPrompt)) {
-    return { text: readFileSync(globalPrompt, "utf-8"), source: globalPrompt };
-  }
-
-  return { text: DEFAULT_AUDIT_PROMPT, source: "built-in default" };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -399,35 +355,24 @@ export async function auditLoop(
   config: Config,
   options: AuditOptions,
 ): Promise<void> {
-  const projectName = basename(process.cwd());
-  const logDir = join(config.logDir, `willie-${projectName}`);
-
-  if (!existsSync(logDir)) {
-    mkdirSync(logDir, { recursive: true });
-  }
-
-  const model = getWillieModel(config);
-  const effort = getWillieEffort(config);
-  const engine: Engine = createWillieEngine(config);
-
-  if (!engine.isAvailable()) {
-    const cliName = getEngineInstallName(engine.name);
-    logError(`'${engine.name}' command not found. Willie requires ${cliName}.`);
+  const session = initializeAuditSession(config, options, DEFAULT_AUDIT_PROMPT);
+  if (!session) {
     process.exitCode = 1;
     return;
   }
 
-  // Resolve audit prompt (CLI flag > project file > global file > built-in default)
-  const resolved = resolveAuditPrompt(options.auditPromptPath);
-  const auditPrompt = resolved.text;
-
-  // Resolve lint and test commands
-  const lintCmd = options.lintCmd ?? config.lintCmd ?? detectLintCommand();
-  const testCmd = config.testCmd ?? detectTestCommand();
-  const fixPrompt = generateFixPrompt({ testCmd, lintCmd });
-
-  // Ensure audit/ directory and exceptions template exist
-  ensureAuditDirectories();
+  const {
+    projectName,
+    logDir,
+    model,
+    effort,
+    engine,
+    auditPrompt,
+    auditPromptSource,
+    lintCmd,
+    testCmd,
+    fixPrompt,
+  } = session;
 
   const maxStr =
     options.maxIterations > 0 ? String(options.maxIterations) : "unlimited";
@@ -438,7 +383,7 @@ export async function auditLoop(
   console.log(`Start step: ${options.startStep}`);
   console.log(`Max iterations: ${maxStr}`);
   console.log(`Model: ${model} (effort: ${effort})`);
-  console.log(`Audit prompt: ${resolved.source}`);
+  console.log(`Audit prompt: ${auditPromptSource}`);
   console.log(`Lint command: ${lintCmd ?? "none detected"}`);
   console.log(`Test command: ${testCmd ?? "none detected"}`);
 

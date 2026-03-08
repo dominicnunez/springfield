@@ -7,11 +7,11 @@ import { getCurrentModel } from "../../config/loader.js";
 import {
   COMPLETE_MARKER,
   type Engine,
+  type EngineResult,
   generateFixTestsPrompt,
   generatePrompt,
   generateSingleTaskPrompt,
 } from "../../engines/base.js";
-import { handleSoftRateLimit as handleSoftRateLimitRetry } from "../../engines/rate-limit.js";
 import {
   allTasksComplete,
   countIncompleteTasks,
@@ -35,8 +35,9 @@ import {
   logWarning,
 } from "../../ui/logger.js";
 import { createRalphEngine, getEngineInstallName } from "../engine-factory.js";
-import { switchToFallbackWithNotice } from "../engine-fallback.js";
+import { runGitStdout } from "../git.js";
 import { notify } from "../notify.js";
+import { resolveRunRateLimitAction } from "../run-rate-limit.js";
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -47,35 +48,29 @@ function sleep(seconds: number): Promise<void> {
 }
 
 function pushAfterCommit(headBefore: string): void {
-  const headAfter = spawnSync("git", ["rev-parse", "HEAD"], {
-    encoding: "utf-8",
-  }).stdout.trim();
+  const headAfter = runGitStdout(["rev-parse", "HEAD"]);
 
-  if (!headBefore || headBefore === headAfter) return;
+  if (!headBefore || !headAfter || headBefore === headAfter) return;
 
   logInfo("New commit detected, pushing to origin");
   console.log("  Pushing changes to origin...");
 
-  const branchResult = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-    encoding: "utf-8",
-  });
-  const branch = branchResult.stdout.trim();
-
-  if (!branch || branchResult.status !== 0) {
+  const branch = runGitStdout(["rev-parse", "--abbrev-ref", "HEAD"]);
+  if (!branch) {
     logWarning("Failed to detect current branch, skipping push");
     console.log("  Failed to detect branch (will retry next iteration)");
     return;
   }
 
-  // Check if branch has upstream
-  const hasUpstream = spawnSync(
-    "git",
-    ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-    { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
-  );
+  const hasUpstream =
+    runGitStdout([
+      "rev-parse",
+      "--abbrev-ref",
+      "--symbolic-full-name",
+      "@{u}",
+    ]) !== null;
 
-  const pushArgs =
-    hasUpstream.status === 0 ? ["push"] : ["push", "-u", "origin", branch];
+  const pushArgs = hasUpstream ? ["push"] : ["push", "-u", "origin", branch];
 
   const pushResult = spawnSync("git", pushArgs, {
     encoding: "utf-8",
@@ -94,14 +89,7 @@ function pushAfterCommit(headBefore: string): void {
 }
 
 function getHeadSha(): string | null {
-  const result = spawnSync("git", ["rev-parse", "HEAD"], {
-    encoding: "utf-8",
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  if (result.status !== 0) {
-    return null;
-  }
-  return result.stdout.trim();
+  return runGitStdout(["rev-parse", "HEAD"]);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -345,55 +333,16 @@ function handleVerificationResult(
   };
 }
 
-function handleHardRateLimit(engine: Engine): "fallback" | "exit" {
-  logWarning("Hard rate limit detected (quota/billing)");
-  console.log("  Hard rate limit: quota or billing issue");
-
-  if (switchToFallbackWithNotice(engine)) {
-    return "fallback";
-  }
-
-  logError("Hard rate limit and no fallback available");
-  console.log("  Hard rate limit and no fallback available");
-  return "exit";
-}
-
-async function handleSoftRateLimit(
+async function handleRunRateLimit(
   engine: Engine,
+  result: Pick<EngineResult, "hardRateLimited" | "softRateLimited">,
   softLimitRetries: number,
   config: Config,
 ): Promise<{
-  action: "retry" | "fallback" | "exit";
+  action: "continue" | "retry" | "fallback" | "exit";
   softLimitRetries: number;
 }> {
-  logWarning("Soft rate limit detected (temporary cooldown)");
-
-  if (
-    await handleSoftRateLimitRetry(
-      softLimitRetries,
-      config.softLimitRetries,
-      config.softLimitWait,
-    )
-  ) {
-    return {
-      action: "retry",
-      softLimitRetries: softLimitRetries + 1,
-    };
-  }
-
-  if (switchToFallbackWithNotice(engine)) {
-    return {
-      action: "fallback",
-      softLimitRetries: 0,
-    };
-  }
-
-  logError("Soft rate limit persisted, no fallback available");
-  console.log("  Rate limit persisted after retries, no fallback available");
-  return {
-    action: "exit",
-    softLimitRetries: 0,
-  };
+  return resolveRunRateLimitAction(engine, result, softLimitRetries, config);
 }
 
 export async function runLoop(
@@ -491,32 +440,25 @@ export async function runLoop(
 
     // Rate limit handling (OpenCode only)
     if (config.engine === "opencode") {
-      if (result.hardRateLimited) {
-        softLimitRetries = 0;
-        if (handleHardRateLimit(engine) === "fallback") {
-          iteration--;
-          continue;
-        }
-        process.exit(1);
+      const rateLimitResolution = await handleRunRateLimit(
+        engine,
+        result,
+        softLimitRetries,
+        config,
+      );
+      softLimitRetries = rateLimitResolution.softLimitRetries;
+
+      if (
+        rateLimitResolution.action === "retry" ||
+        rateLimitResolution.action === "fallback"
+      ) {
+        iteration--;
+        continue;
       }
 
-      if (result.softRateLimited) {
-        const rateLimitResolution = await handleSoftRateLimit(
-          engine,
-          softLimitRetries,
-          config,
-        );
-        softLimitRetries = rateLimitResolution.softLimitRetries;
-
-        if (rateLimitResolution.action !== "exit") {
-          iteration--;
-          continue;
-        }
-
+      if (rateLimitResolution.action === "exit") {
         process.exit(1);
       }
-
-      softLimitRetries = 0;
     }
 
     if (!result.success) {
@@ -677,40 +619,25 @@ export async function runSingleTask(
     let softRetries = 0;
 
     while (result.softRateLimited || result.hardRateLimited) {
-      if (result.hardRateLimited) {
-        if (handleHardRateLimit(engine) === "fallback") {
-          result = await engine.run(prompt);
-          logAiOutput(result.output);
-          console.log("");
-          break;
-        }
+      const rateLimitResolution = await handleRunRateLimit(
+        engine,
+        result,
+        softRetries,
+        config,
+      );
+      softRetries = rateLimitResolution.softLimitRetries;
+
+      if (rateLimitResolution.action === "exit") {
         process.exit(1);
       }
 
-      if (result.softRateLimited) {
-        const rateLimitResolution = await handleSoftRateLimit(
-          engine,
-          softRetries,
-          config,
-        );
-        softRetries = rateLimitResolution.softLimitRetries;
-
-        if (rateLimitResolution.action === "retry") {
-          result = await engine.run(prompt);
-          logAiOutput(result.output);
-          console.log("");
-          continue;
-        }
-
-        if (rateLimitResolution.action === "fallback") {
-          result = await engine.run(prompt);
-          logAiOutput(result.output);
-          console.log("");
-          break;
-        }
-
-        process.exit(1);
+      if (rateLimitResolution.action === "continue") {
+        break;
       }
+
+      result = await engine.run(prompt);
+      logAiOutput(result.output);
+      console.log("");
     }
   }
 
