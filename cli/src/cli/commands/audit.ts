@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
   existsSync,
@@ -6,13 +5,12 @@ import {
   readdirSync,
   readFileSync,
   unlinkSync,
-  writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import pc from "picocolors";
 import type { Config } from "../../config/loader.js";
-import { getCurrentModel, getWillieEffort } from "../../config/loader.js";
+import { getWillieEffort, getWillieModel } from "../../config/loader.js";
 import {
   DEFAULT_AUDIT_PROMPT,
   type Engine,
@@ -20,9 +18,6 @@ import {
   generateFixPrompt,
   VALIDATE_PROMPT,
 } from "../../engines/base.js";
-import { ClaudeEngine } from "../../engines/claude.js";
-import { CodexEngine } from "../../engines/codex.js";
-import { OpenCodeEngine } from "../../engines/opencode.js";
 import { handleSoftRateLimit } from "../../engines/rate-limit.js";
 import {
   detectLintCommand,
@@ -30,13 +25,21 @@ import {
 } from "../../tasks/verification.js";
 import {
   formatDivider,
-  logDebug,
   logError,
   logInfo,
   logSuccess,
   logWarning,
 } from "../../ui/logger.js";
-import { EXCEPTION_FILE_TEMPLATES } from "../exception-format.js";
+import {
+  AUDIT_DIR,
+  AUDIT_EXCEPTIONS_DIR,
+  AUDIT_PROMPT_FILE,
+  AUDIT_REPORT_FILE,
+  ensureAuditDirectories,
+} from "../audit-paths.js";
+import { createWillieEngine, getEngineInstallName } from "../engine-factory.js";
+import { switchToFallbackWithNotice } from "../engine-fallback.js";
+import { notify } from "../notify.js";
 import { parseExceptionFile } from "./prune.js";
 
 // ─────────────────────────────────────────────────────────────
@@ -65,32 +68,9 @@ export interface AuditOptions {
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-const AUDIT_DIR = "audit";
-const REPORT_FILE = join(AUDIT_DIR, "report.md");
-const EXCEPTIONS_DIR = join(AUDIT_DIR, "exceptions");
-const ENGINE_CLI_NAMES: Record<string, string> = {
-  claude: "Claude CLI",
-  codex: "Codex CLI",
-  opencode: "OpenCode CLI",
-};
-
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
-
-function notify(message: string): void {
-  try {
-    const result = spawnSync("which", ["openclaw"], { encoding: "utf-8" });
-    if (result.status === 0) {
-      spawnSync("openclaw", ["cron", "wake", message], {
-        encoding: "utf-8",
-        stdio: "ignore",
-      });
-    }
-  } catch (err) {
-    logDebug(`Notification failed: ${err}`);
-  }
-}
 
 function countFindings(reportPath: string): number {
   if (!existsSync(reportPath)) return 0;
@@ -110,28 +90,6 @@ function countFindings(reportPath: string): number {
   return 0;
 }
 
-function ensureAuditDir(): void {
-  if (!existsSync(AUDIT_DIR)) {
-    mkdirSync(AUDIT_DIR, { recursive: true });
-  }
-  if (!existsSync(EXCEPTIONS_DIR)) {
-    mkdirSync(EXCEPTIONS_DIR, { recursive: true });
-    writeFileSync(
-      join(EXCEPTIONS_DIR, "misreads.md"),
-      EXCEPTION_FILE_TEMPLATES["misreads.md"],
-    );
-    writeFileSync(
-      join(EXCEPTIONS_DIR, "risks.md"),
-      EXCEPTION_FILE_TEMPLATES["risks.md"],
-    );
-    writeFileSync(
-      join(EXCEPTIONS_DIR, "design.md"),
-      EXCEPTION_FILE_TEMPLATES["design.md"],
-    );
-    logInfo("Created audit/exceptions/ with template files");
-  }
-}
-
 function extractFindingFiles(reportPath: string): Set<string> {
   if (!existsSync(reportPath)) return new Set();
   const content = readFileSync(reportPath, "utf-8");
@@ -143,13 +101,13 @@ function extractFindingFiles(reportPath: string): Set<string> {
 }
 
 function readMatchingExceptions(findingFiles: Set<string>): string {
-  if (!existsSync(EXCEPTIONS_DIR) || findingFiles.size === 0) return "";
-  const mdFiles = readdirSync(EXCEPTIONS_DIR)
+  if (!existsSync(AUDIT_EXCEPTIONS_DIR) || findingFiles.size === 0) return "";
+  const mdFiles = readdirSync(AUDIT_EXCEPTIONS_DIR)
     .filter((f) => f.endsWith(".md"))
     .sort();
   const matched: string[] = [];
   for (const file of mdFiles) {
-    const filePath = join(EXCEPTIONS_DIR, file);
+    const filePath = join(AUDIT_EXCEPTIONS_DIR, file);
     const content = readFileSync(filePath, "utf-8").trim();
     const parsed = parseExceptionFile(filePath, content);
     for (const entry of parsed.entries) {
@@ -190,11 +148,10 @@ function resolveAuditPrompt(
     };
   }
 
-  const projectPrompt = join(AUDIT_DIR, "prompt.md");
-  if (existsSync(projectPrompt)) {
+  if (existsSync(AUDIT_PROMPT_FILE)) {
     return {
-      text: readFileSync(projectPrompt, "utf-8"),
-      source: projectPrompt,
+      text: readFileSync(AUDIT_PROMPT_FILE, "utf-8"),
+      source: AUDIT_PROMPT_FILE,
     };
   }
 
@@ -242,21 +199,21 @@ async function runAuditStep(
     );
   }
 
-  if (!existsSync(REPORT_FILE)) {
+  if (!existsSync(AUDIT_REPORT_FILE)) {
     logSuccess("No audit/report.md generated — codebase is clean!");
     return { result: "stop", matchedExceptions: "" };
   }
 
-  const findingCount = countFindings(REPORT_FILE);
+  const findingCount = countFindings(AUDIT_REPORT_FILE);
   if (findingCount === 0) {
     logSuccess("Audit report has no findings. Cleaning up.");
-    unlinkSync(REPORT_FILE);
+    unlinkSync(AUDIT_REPORT_FILE);
     return { result: "stop", matchedExceptions: "" };
   }
 
   logInfo(`Audit found ${findingCount} issue(s).`);
 
-  const findingFiles = extractFindingFiles(REPORT_FILE);
+  const findingFiles = extractFindingFiles(AUDIT_REPORT_FILE);
   const matchedExceptions = readMatchingExceptions(findingFiles);
 
   return { result: "continue", matchedExceptions };
@@ -285,16 +242,16 @@ async function runValidateStep(
     );
   }
 
-  if (!existsSync(REPORT_FILE)) {
+  if (!existsSync(AUDIT_REPORT_FILE)) {
     logInfo("All findings were false positives.");
     return "ok";
   }
 
-  const remaining = countFindings(REPORT_FILE);
+  const remaining = countFindings(AUDIT_REPORT_FILE);
   logInfo(`${remaining} validated finding(s) remain.`);
 
   if (remaining === 0) {
-    unlinkSync(REPORT_FILE);
+    unlinkSync(AUDIT_REPORT_FILE);
     logInfo("Report empty after validation.");
   }
 
@@ -307,7 +264,7 @@ async function runFixStep(
   logDir: string,
   iter: number,
 ): Promise<StepResult> {
-  if (!existsSync(REPORT_FILE)) {
+  if (!existsSync(AUDIT_REPORT_FILE)) {
     logInfo("No audit report to fix. Skipping step 3.");
     return "ok";
   }
@@ -325,10 +282,10 @@ async function runFixStep(
     );
   }
 
-  if (!existsSync(REPORT_FILE)) {
+  if (!existsSync(AUDIT_REPORT_FILE)) {
     logInfo("All issues resolved.");
   } else {
-    const remaining = countFindings(REPORT_FILE);
+    const remaining = countFindings(AUDIT_REPORT_FILE);
     if (remaining > 0) {
       logWarning(`${remaining} finding(s) remain after fix step.`);
     }
@@ -370,7 +327,7 @@ async function withRateLimitRetry<T>(
   }
 
   state.retries = 0;
-  if (engine.switchToFallback?.()) {
+  if (switchToFallbackWithNotice(engine)) {
     return { signal: "retry" };
   }
 
@@ -449,20 +406,12 @@ export async function auditLoop(
     mkdirSync(logDir, { recursive: true });
   }
 
-  const model = getCurrentModel(config);
+  const model = getWillieModel(config);
   const effort = getWillieEffort(config);
-
-  let engine: Engine;
-  if (config.engine === "opencode") {
-    engine = new OpenCodeEngine(model, config.ocFallModel);
-  } else if (config.engine === "codex") {
-    engine = new CodexEngine(model === "default" ? undefined : model);
-  } else {
-    engine = new ClaudeEngine(model, effort);
-  }
+  const engine: Engine = createWillieEngine(config);
 
   if (!engine.isAvailable()) {
-    const cliName = ENGINE_CLI_NAMES[engine.name] ?? `${engine.name} CLI`;
+    const cliName = getEngineInstallName(engine.name);
     logError(`'${engine.name}' command not found. Willie requires ${cliName}.`);
     process.exitCode = 1;
     return;
@@ -478,7 +427,7 @@ export async function auditLoop(
   const fixPrompt = generateFixPrompt({ testCmd, lintCmd });
 
   // Ensure audit/ directory and exceptions template exist
-  ensureAuditDir();
+  ensureAuditDirectories();
 
   const maxStr =
     options.maxIterations > 0 ? String(options.maxIterations) : "unlimited";

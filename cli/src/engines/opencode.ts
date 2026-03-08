@@ -181,16 +181,6 @@ export class OpenCodeEngine implements Engine {
 
   switchToFallback(): boolean {
     if (this.fallbackModel && !this.usingFallback) {
-      logWarning(
-        `Rate limit on ${this.model}, switching to fallback: ${this.fallbackModel}`,
-      );
-      console.log("");
-      console.log("===========================================");
-      console.log(`  Rate limit detected on ${this.model}`);
-      console.log(`  Switching to fallback: ${this.fallbackModel}`);
-      console.log("===========================================");
-      console.log("");
-
       this.model = this.fallbackModel;
       this.usingFallback = true;
       return true;

@@ -2,11 +2,10 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import pc from "picocolors";
 import type { Config } from "../../config/loader.js";
-import { getWillieEffort, getWillieModel } from "../../config/loader.js";
 import type { Engine } from "../../engines/base.js";
-import { ClaudeEngine } from "../../engines/claude.js";
-import { OpenCodeEngine } from "../../engines/opencode.js";
 import { logDebug, logError, logInfo, logSuccess } from "../../ui/logger.js";
+import { AUDIT_EXCEPTIONS_DIR } from "../audit-paths.js";
+import { createWillieEngine, getEngineInstallName } from "../engine-factory.js";
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -28,7 +27,6 @@ export interface ExceptionFile {
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-const EXCEPTIONS_DIR = join("audit", "exceptions");
 const CONTEXT_LINES = 20;
 
 // ─────────────────────────────────────────────────────────────
@@ -255,15 +253,15 @@ export async function pruneExceptions(
   config: Config,
   options: { verbose?: boolean },
 ): Promise<void> {
-  if (!existsSync(EXCEPTIONS_DIR)) {
+  if (!existsSync(AUDIT_EXCEPTIONS_DIR)) {
     logError(
-      `${EXCEPTIONS_DIR}/ not found. Run 'sfk audit' first to generate exception files.`,
+      `${AUDIT_EXCEPTIONS_DIR}/ not found. Run 'sfk audit' first to generate exception files.`,
     );
     process.exitCode = 1;
     return;
   }
 
-  const mdFiles = readdirSync(EXCEPTIONS_DIR)
+  const mdFiles = readdirSync(AUDIT_EXCEPTIONS_DIR)
     .filter((f) => f.endsWith(".md"))
     .sort();
 
@@ -274,7 +272,7 @@ export async function pruneExceptions(
 
   // Parse all files
   const files: ExceptionFile[] = mdFiles.map((f) => {
-    const filePath = join(EXCEPTIONS_DIR, f);
+    const filePath = join(AUDIT_EXCEPTIONS_DIR, f);
     const content = readFileSync(filePath, "utf-8");
     return parseExceptionFile(filePath, content);
   });
@@ -310,20 +308,12 @@ export async function pruneExceptions(
   }
 
   // Phase 2: AI review
-  const model = getWillieModel(config);
-  const effort = getWillieEffort(config);
-
-  let engine: Engine;
-  if (config.engine === "opencode") {
-    engine = new OpenCodeEngine(model, config.ocFallModel);
-  } else {
-    engine = new ClaudeEngine(model, effort);
-  }
+  const engine: Engine = createWillieEngine(config);
 
   if (!engine.isAvailable()) {
-    const engineName = config.engine === "opencode" ? "opencode" : "claude";
+    const cliName = getEngineInstallName(engine.name);
     logError(
-      `'${engineName}' command not found. Prune requires ${engineName} CLI for AI review.`,
+      `'${engine.name}' command not found. Prune requires ${cliName} for AI review.`,
     );
     process.exitCode = 1;
     return;

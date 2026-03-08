@@ -3,7 +3,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import { basename, join } from "node:path";
 import pc from "picocolors";
 import type { Config } from "../../config/loader.js";
-import { getCurrentModel, getRalphEffort } from "../../config/loader.js";
+import { getCurrentModel } from "../../config/loader.js";
 import {
   COMPLETE_MARKER,
   type Engine,
@@ -11,9 +11,6 @@ import {
   generatePrompt,
   generateSingleTaskPrompt,
 } from "../../engines/base.js";
-import { ClaudeEngine } from "../../engines/claude.js";
-import { CodexEngine } from "../../engines/codex.js";
-import { OpenCodeEngine } from "../../engines/opencode.js";
 import { handleSoftRateLimit as handleSoftRateLimitRetry } from "../../engines/rate-limit.js";
 import {
   allTasksComplete,
@@ -30,7 +27,6 @@ import { detectTestCommand, verify } from "../../tasks/verification.js";
 import {
   initLogger,
   logAiOutput,
-  logDebug,
   logError,
   logInfo,
   logIteration,
@@ -38,32 +34,16 @@ import {
   logSuccess,
   logWarning,
 } from "../../ui/logger.js";
+import { createRalphEngine, getEngineInstallName } from "../engine-factory.js";
+import { switchToFallbackWithNotice } from "../engine-fallback.js";
+import { notify } from "../notify.js";
 
-const ENGINE_INSTALL_NAMES: Record<string, string> = {
-  claude: "Claude CLI",
-  codex: "Codex CLI",
-  opencode: "OpenCode CLI",
-};
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
 
 function sleep(seconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
-}
-
-function notify(message: string): void {
-  try {
-    const result = spawnSync("which", ["openclaw"], { encoding: "utf-8" });
-    if (result.status === 0) {
-      spawnSync("openclaw", ["cron", "wake", message], {
-        encoding: "utf-8",
-        stdio: "ignore",
-      });
-    }
-  } catch (err) {
-    logDebug(`Notification failed: ${err}`);
-  }
 }
 
 function pushAfterCommit(headBefore: string): void {
@@ -125,20 +105,6 @@ function getHeadSha(): string | null {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Engine factory
-// ─────────────────────────────────────────────────────────────
-
-function createEngine(config: Config): Engine {
-  if (config.engine === "claude") {
-    return new ClaudeEngine(getCurrentModel(config), getRalphEffort(config));
-  }
-  if (config.engine === "codex") {
-    return new CodexEngine(config.codexModel);
-  }
-  return new OpenCodeEngine(config.ocPrimeModel, config.ocFallModel);
-}
-
-// ─────────────────────────────────────────────────────────────
 // Run loop
 // ─────────────────────────────────────────────────────────────
 
@@ -179,13 +145,13 @@ function initializeRunSession(
   const logFile = join(config.logDir, `ralph-${projectName}.log`);
   const progressFile = getProgressFile(projectName, config.progressDir);
   const model = getCurrentModel(config);
-  const engine = engineOverride ?? createEngine(config);
+  const engine = engineOverride ?? createRalphEngine(config);
 
   initLogger({ logFile, verbose: options.verbose });
   initProgress(config.progressDir, progressFile);
 
   if (!engine.isAvailable()) {
-    const installName = ENGINE_INSTALL_NAMES[engine.name] ?? "required CLI";
+    const installName = getEngineInstallName(engine.name);
     logError(
       `'${engine.name}' command not found. Please install ${installName}.`,
     );
@@ -383,7 +349,7 @@ function handleHardRateLimit(engine: Engine): "fallback" | "exit" {
   logWarning("Hard rate limit detected (quota/billing)");
   console.log("  Hard rate limit: quota or billing issue");
 
-  if (engine.switchToFallback?.()) {
+  if (switchToFallbackWithNotice(engine)) {
     return "fallback";
   }
 
@@ -415,7 +381,7 @@ async function handleSoftRateLimit(
     };
   }
 
-  if (engine.switchToFallback?.()) {
+  if (switchToFallbackWithNotice(engine)) {
     return {
       action: "fallback",
       softLimitRetries: 0,

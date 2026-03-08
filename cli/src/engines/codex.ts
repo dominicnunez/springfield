@@ -59,7 +59,7 @@ export class CodexEngine implements Engine {
         return;
       }
 
-      const { child, rl, killChild, installSafetyTimeout } = processResult;
+      const { child, rl, installSafetyTimeout } = processResult;
 
       const outputLines: string[] = [];
       let stderr = "";
