@@ -1,6 +1,6 @@
 {
   "name": "sfk",
-  "version": "0.0.24",
+  "version": "0.0.241",
   "description": "Springfield Kit — Autonomous AI development kit",
   "type": "module",
   "main": "dist/index.js",
