@@ -1,14 +1,17 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Config } from "../../config/loader.js";
+import type { Engine } from "../../engines/base.js";
 import { ClaudeEngine } from "../../engines/claude.js";
 import { CodexEngine } from "../../engines/codex.js";
 import { OpenCodeEngine } from "../../engines/opencode.js";
+import * as logger from "../../ui/logger.js";
 import {
   createRalphEngine,
   createWillieEngine,
   getEngineInstallName,
+  initializeWillieEngine,
 } from "../engine-factory.js";
 
 function baseConfig(overrides: Partial<Config> = {}): Config {
@@ -113,5 +116,41 @@ describe("engine factory", () => {
     expect(getEngineInstallName("claude")).toBe("Claude CLI");
     expect(getEngineInstallName("codex")).toBe("Codex CLI");
     expect(getEngineInstallName("opencode")).toBe("OpenCode CLI");
+  });
+
+  test("initializeWillieEngine returns the engine when available", () => {
+    const engine: Engine = {
+      name: "stub",
+      model: "stub-model",
+      isAvailable: () => true,
+      run: async () => ({ success: true, output: "", exitCode: 0 }),
+      switchToFallback: () => false,
+    };
+
+    expect(initializeWillieEngine(baseConfig(), () => "unused", engine)).toBe(
+      engine,
+    );
+  });
+
+  test("initializeWillieEngine logs the caller-specific unavailable message", () => {
+    const engine: Engine = {
+      name: "stub",
+      model: "stub-model",
+      isAvailable: () => false,
+      run: async () => ({ success: true, output: "", exitCode: 0 }),
+      switchToFallback: () => false,
+    };
+    const logSpy = spyOn(logger, "logError").mockImplementation(() => {});
+
+    expect(
+      initializeWillieEngine(
+        baseConfig(),
+        (engineName, cliName) => `${engineName} needs ${cliName}`,
+        engine,
+      ),
+    ).toBeNull();
+    expect(logSpy).toHaveBeenCalledWith("stub needs stub CLI");
+
+    logSpy.mockRestore();
   });
 });

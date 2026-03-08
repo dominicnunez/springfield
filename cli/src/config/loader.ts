@@ -542,49 +542,63 @@ export function loadConfig(): Config {
  * Get the current model based on engine type
  */
 export function getCurrentModel(config: Config): string {
-  if (config.engine === "claude") return config.claudeModel;
-  if (config.engine === "codex") return config.codexModel ?? "default";
-  return config.ocPrimeModel;
+  return getEngineDefaultModel(config);
 }
 
 /**
  * Get the effective model for ralph (per-agent override or global default)
  */
 export function getRalphModel(config: Config): string {
-  if (config.engine === "claude") {
-    return config.ralphModel ?? config.claudeModel;
-  }
-  if (config.engine === "codex") {
-    return config.codexModel ?? "default";
-  }
-  if (config.engine === "opencode") {
-    return config.ocPrimeModel;
-  }
-  return config.ralphModel ?? config.claudeModel ?? config.ocPrimeModel;
+  return getEffectiveAgentModel(config, "ralph");
 }
 
 /**
  * Get the effective effort level for ralph
  */
 export function getRalphEffort(config: Config): EffortLevel {
-  return config.ralphEffort ?? config.claudeEffort;
+  return getEffectiveAgentEffort(config, "ralph");
 }
 
 /**
  * Get the effective model for willie (defaults to engine's primary model)
  */
 export function getWillieModel(config: Config): string {
-  if (config.willieModel) return config.willieModel;
-  if (config.engine === "claude") return config.claudeModel;
-  if (config.engine === "codex") return config.codexModel ?? "default";
-  return config.ocPrimeModel;
+  return getEffectiveAgentModel(config, "willie");
 }
 
 /**
  * Get the effective effort level for willie
  */
 export function getWillieEffort(config: Config): EffortLevel {
-  return config.willieEffort ?? config.claudeEffort;
+  return getEffectiveAgentEffort(config, "willie");
+}
+
+type AgentName = "ralph" | "willie";
+
+function getEngineDefaultModel(config: Config): string {
+  if (config.engine === "claude") return config.claudeModel;
+  if (config.engine === "codex") return config.codexModel ?? "default";
+  return config.ocPrimeModel;
+}
+
+function getEffectiveAgentModel(config: Config, agent: AgentName): string {
+  if (agent === "willie" && config.willieModel) {
+    return config.willieModel;
+  }
+
+  if (agent === "ralph" && config.engine === "claude") {
+    return config.ralphModel ?? config.claudeModel;
+  }
+
+  return getEngineDefaultModel(config);
+}
+
+function getEffectiveAgentEffort(
+  config: Config,
+  agent: AgentName,
+): EffortLevel {
+  const override = agent === "ralph" ? config.ralphEffort : config.willieEffort;
+  return override ?? config.claudeEffort;
 }
 
 export function getGlobalConfigPath(): string {

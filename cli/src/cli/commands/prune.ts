@@ -5,7 +5,7 @@ import type { Config } from "../../config/loader.js";
 import type { Engine } from "../../engines/base.js";
 import { logDebug, logError, logInfo, logSuccess } from "../../ui/logger.js";
 import { AUDIT_EXCEPTIONS_DIR } from "../audit-paths.js";
-import { createWillieEngine, getEngineInstallName } from "../engine-factory.js";
+import { initializeWillieEngine } from "../engine-factory.js";
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -308,13 +308,12 @@ export async function pruneExceptions(
   }
 
   // Phase 2: AI review
-  const engine: Engine = createWillieEngine(config);
-
-  if (!engine.isAvailable()) {
-    const cliName = getEngineInstallName(engine.name);
-    logError(
-      `'${engine.name}' command not found. Prune requires ${cliName} for AI review.`,
-    );
+  const engine = initializeWillieEngine(
+    config,
+    (engineName, cliName) =>
+      `'${engineName}' command not found. Prune requires ${cliName} for AI review.`,
+  );
+  if (!engine) {
     process.exitCode = 1;
     return;
   }

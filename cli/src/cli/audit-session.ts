@@ -5,9 +5,8 @@ import type { Config } from "../config/loader.js";
 import { getWillieEffort, getWillieModel } from "../config/loader.js";
 import { type Engine, generateFixPrompt } from "../engines/base.js";
 import { detectLintCommand, detectTestCommand } from "../tasks/verification.js";
-import { logError } from "../ui/logger.js";
 import { AUDIT_PROMPT_FILE, ensureAuditDirectories } from "./audit-paths.js";
-import { createWillieEngine, getEngineInstallName } from "./engine-factory.js";
+import { initializeWillieEngine } from "./engine-factory.js";
 
 export interface ResolvedPrompt {
   text: string;
@@ -73,11 +72,13 @@ export function initializeAuditSession(
 
   const model = getWillieModel(config);
   const effort = getWillieEffort(config);
-  const engine = engineOverride ?? createWillieEngine(config);
-
-  if (!engine.isAvailable()) {
-    const cliName = getEngineInstallName(engine.name);
-    logError(`'${engine.name}' command not found. Willie requires ${cliName}.`);
+  const engine = initializeWillieEngine(
+    config,
+    (engineName, cliName) =>
+      `'${engineName}' command not found. Willie requires ${cliName}.`,
+    engineOverride,
+  );
+  if (!engine) {
     return null;
   }
 

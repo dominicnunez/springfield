@@ -9,6 +9,7 @@ import type { Engine } from "../engines/base.js";
 import { ClaudeEngine } from "../engines/claude.js";
 import { CodexEngine } from "../engines/codex.js";
 import { OpenCodeEngine } from "../engines/opencode.js";
+import { logError } from "../ui/logger.js";
 
 const ENGINE_INSTALL_NAMES: Record<string, string> = {
   claude: "Claude CLI",
@@ -44,4 +45,20 @@ export function createWillieEngine(config: Config): Engine {
   }
 
   return new ClaudeEngine(model, getWillieEffort(config));
+}
+
+export function initializeWillieEngine(
+  config: Config,
+  buildUnavailableMessage: (engineName: string, cliName: string) => string,
+  engineOverride?: Engine,
+): Engine | null {
+  const engine = engineOverride ?? createWillieEngine(config);
+
+  if (!engine.isAvailable()) {
+    const cliName = getEngineInstallName(engine.name);
+    logError(buildUnavailableMessage(engine.name, cliName));
+    return null;
+  }
+
+  return engine;
 }
