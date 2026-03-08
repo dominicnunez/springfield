@@ -23,6 +23,46 @@ export interface VerificationResult {
 }
 
 type PackageManager = "bun" | "pnpm" | "yarn" | "npm";
+type ProbeMode = "any" | "all";
+
+interface CommandProbe {
+  command: string;
+  files: string[];
+  mode?: ProbeMode;
+}
+
+const TEST_COMMAND_PROBES: readonly CommandProbe[] = [
+  {
+    command: "npx vitest run",
+    files: ["vitest.config.ts", "vitest.config.js"],
+  },
+  { command: "npx jest", files: ["jest.config.ts", "jest.config.js"] },
+  { command: "pytest", files: ["pytest.ini", "pyproject.toml"] },
+  { command: "go test ./...", files: ["go.mod"] },
+  { command: "cargo test", files: ["Cargo.toml"] },
+];
+
+const ESLINT_CONFIGS = [
+  "eslint.config.js",
+  "eslint.config.mjs",
+  "eslint.config.cjs",
+  ".eslintrc.js",
+  ".eslintrc.cjs",
+  ".eslintrc.json",
+  ".eslintrc.yml",
+  ".eslintrc.yaml",
+] as const;
+
+const LINT_COMMAND_PROBES: readonly CommandProbe[] = [
+  { command: "npx biome check .", files: ["biome.json", "biome.jsonc"] },
+  { command: "npx eslint .", files: [...ESLINT_CONFIGS] },
+  {
+    command: "golangci-lint run",
+    files: ["go.mod", ".golangci.yml"],
+    mode: "all",
+  },
+  { command: "cargo clippy", files: ["Cargo.toml"] },
+];
 
 /**
  * Detect which package manager the project uses based on lockfiles
@@ -54,78 +94,38 @@ export function detectPackageScript(scriptName: string): string | undefined {
   }
 }
 
+function matchesProbe(probe: CommandProbe): boolean {
+  if (probe.mode === "all") {
+    return probe.files.every((file) => existsSync(file));
+  }
+
+  return probe.files.some((file) => existsSync(file));
+}
+
+function detectCommand(
+  scriptName: string,
+  probes: readonly CommandProbe[],
+): string | undefined {
+  const fromPkg = detectPackageScript(scriptName);
+  if (fromPkg) {
+    return fromPkg;
+  }
+
+  return probes.find(matchesProbe)?.command;
+}
+
 /**
  * Auto-detect test command based on project files
  */
 export function detectTestCommand(): string | undefined {
-  const fromPkg = detectPackageScript("test");
-  if (fromPkg) return fromPkg;
-
-  // Check for common test config files
-  if (existsSync("vitest.config.ts") || existsSync("vitest.config.js")) {
-    return "npx vitest run";
-  }
-
-  if (existsSync("jest.config.ts") || existsSync("jest.config.js")) {
-    return "npx jest";
-  }
-
-  // Python
-  if (existsSync("pytest.ini") || existsSync("pyproject.toml")) {
-    return "pytest";
-  }
-
-  // Go
-  if (existsSync("go.mod")) {
-    return "go test ./...";
-  }
-
-  // Rust
-  if (existsSync("Cargo.toml")) {
-    return "cargo test";
-  }
-
-  return undefined;
+  return detectCommand("test", TEST_COMMAND_PROBES);
 }
 
 /**
  * Auto-detect lint command based on project files
  */
 export function detectLintCommand(): string | undefined {
-  const fromPkg = detectPackageScript("lint");
-  if (fromPkg) return fromPkg;
-
-  // Biome
-  if (existsSync("biome.json") || existsSync("biome.jsonc")) {
-    return "npx biome check .";
-  }
-
-  // ESLint (flat config and legacy)
-  const eslintConfigs = [
-    "eslint.config.js",
-    "eslint.config.mjs",
-    "eslint.config.cjs",
-    ".eslintrc.js",
-    ".eslintrc.cjs",
-    ".eslintrc.json",
-    ".eslintrc.yml",
-    ".eslintrc.yaml",
-  ];
-  if (eslintConfigs.some((f) => existsSync(f))) {
-    return "npx eslint .";
-  }
-
-  // Go (only if golangci-lint config exists alongside go.mod)
-  if (existsSync("go.mod") && existsSync(".golangci.yml")) {
-    return "golangci-lint run";
-  }
-
-  // Rust
-  if (existsSync("Cargo.toml")) {
-    return "cargo clippy";
-  }
-
-  return undefined;
+  return detectCommand("lint", LINT_COMMAND_PROBES);
 }
 
 /**

@@ -1,9 +1,7 @@
-import * as childProcess from "node:child_process";
-import { createInterface } from "node:readline";
 import { DEFAULT_OC_PRIME_MODEL } from "../config/loader.js";
 import { logWarning } from "../ui/logger.js";
 import type { Engine, EngineResult } from "./base.js";
-import { SAFETY_TIMEOUT_MS, SIGKILL_DELAY_MS } from "./constants.js";
+import { commandExists, spawnLineProcess } from "./process.js";
 
 interface OpenCodeEvent {
   type: string;
@@ -42,53 +40,37 @@ export class OpenCodeEngine implements Engine {
   }
 
   isAvailable(): boolean {
-    const result = childProcess.spawnSync("which", ["opencode"], {
-      encoding: "utf-8",
-    });
-    return result.status === 0;
+    return commandExists("opencode");
   }
 
   async run(prompt: string): Promise<EngineResult> {
     const args = ["run", "--format", "json", "--model", this.model, prompt];
 
     return new Promise<EngineResult>((resolve) => {
-      const child = childProcess.spawn("opencode", args, {
-        cwd: process.cwd(),
-        stdio: ["inherit", "pipe", "pipe"],
-      });
+      const processResult = spawnLineProcess("opencode", args, [
+        "inherit",
+        "pipe",
+        "pipe",
+      ]);
 
-      let output = "";
-      let stderr = "";
-      let killed = false;
-      let completed = false;
-      let rateLimited = false;
-      let hardRateLimited = false;
-      let softRateLimited = false;
-
-      const killChild = () => {
-        if (!killed) {
-          killed = true;
-          child.kill("SIGTERM");
-          setTimeout(() => {
-            try {
-              child.kill("SIGKILL");
-            } catch {}
-          }, SIGKILL_DELAY_MS);
-        }
-      };
-
-      if (!child.stdout) {
-        child.kill();
+      if ("error" in processResult) {
         resolve({
           success: false,
-          output: "Failed to spawn opencode: no stdout",
+          output: processResult.error,
           exitCode: 1,
           rateLimited: false,
         });
         return;
       }
 
-      const rl = createInterface({ input: child.stdout });
+      const { child, rl, killChild, installSafetyTimeout } = processResult;
+
+      let output = "";
+      let stderr = "";
+      let completed = false;
+      let rateLimited = false;
+      let hardRateLimited = false;
+      let softRateLimited = false;
 
       rl.on("line", (line) => {
         if (!line.trim()) return;
@@ -193,16 +175,7 @@ export class OpenCodeEngine implements Engine {
         });
       });
 
-      const safetyTimeout = setTimeout(() => {
-        process.stderr.write(
-          `\n[sfk] Safety timeout reached (${SAFETY_TIMEOUT_MS / 60000} min), killing OpenCode process\n`,
-        );
-        killChild();
-      }, SAFETY_TIMEOUT_MS);
-
-      child.once("close", () => {
-        clearTimeout(safetyTimeout);
-      });
+      installSafetyTimeout("OpenCode process");
     });
   }
 

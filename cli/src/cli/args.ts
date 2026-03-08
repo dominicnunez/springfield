@@ -3,6 +3,7 @@ import { Command, type OptionValues } from "commander";
 import type { Config, EngineType } from "../config/loader.js";
 import { VERSION } from "../version.js";
 import type { AuditStep } from "./commands/audit.js";
+import { applyEngineModelSelection } from "./model-overrides.js";
 
 export type CommandType = "run" | "audit" | "prune";
 
@@ -209,21 +210,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
  * CLI options take precedence
  */
 export function mergeOptions(config: Config, cliOptions: CliOptions): Config {
-  const merged = { ...config };
-
-  if (cliOptions.engine) {
-    merged.engine = cliOptions.engine;
-  }
-
-  if (cliOptions.model !== undefined) {
-    if (merged.engine === "claude") {
-      merged.claudeModel = cliOptions.model;
-    } else if (merged.engine === "codex") {
-      merged.codexModel = cliOptions.model;
-    } else {
-      merged.ocPrimeModel = cliOptions.model;
-    }
-  }
+  const merged = applyEngineModelSelection(config, {
+    engine: cliOptions.engine,
+    model: cliOptions.model,
+  });
 
   if (cliOptions.maxIterations !== undefined) {
     if (cliOptions.maxIterations < -1) {

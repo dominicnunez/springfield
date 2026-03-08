@@ -1,8 +1,6 @@
-import * as childProcess from "node:child_process";
-import { createInterface } from "node:readline";
 import type { EffortLevel } from "../config/loader.js";
 import type { Engine, EngineResult } from "./base.js";
-import { SAFETY_TIMEOUT_MS, SIGKILL_DELAY_MS } from "./constants.js";
+import { commandExists, spawnLineProcess } from "./process.js";
 
 export class ClaudeEngine implements Engine {
   name = "claude";
@@ -15,14 +13,7 @@ export class ClaudeEngine implements Engine {
   }
 
   isAvailable(): boolean {
-    try {
-      const result = childProcess.spawnSync("which", ["claude"], {
-        encoding: "utf-8",
-      });
-      return result.status === 0;
-    } catch {
-      return false;
-    }
+    return commandExists("claude");
   }
 
   async run(prompt: string): Promise<EngineResult> {
@@ -39,33 +30,28 @@ export class ClaudeEngine implements Engine {
     ];
 
     return new Promise<EngineResult>((resolve) => {
-      const child = childProcess.spawn("claude", args, {
-        cwd: process.cwd(),
-        stdio: ["ignore", "pipe", "pipe"],
-      });
+      const processResult = spawnLineProcess("claude", args, [
+        "ignore",
+        "pipe",
+        "pipe",
+      ]);
+
+      if ("error" in processResult) {
+        resolve({
+          success: false,
+          output: processResult.error,
+          exitCode: 1,
+          rateLimited: false,
+        });
+        return;
+      }
+
+      const { child, rl, killChild, installSafetyTimeout } = processResult;
 
       let output = "";
       // biome-ignore lint/suspicious/noExplicitAny: Claude stream events have varying shapes
       let resultEvent: any = null;
       let lastAssistantText = "";
-      let killed = false;
-
-      const killChild = () => {
-        if (!killed) {
-          killed = true;
-          child.kill("SIGTERM");
-          // Force kill after 5s if SIGTERM doesn't work
-          setTimeout(() => {
-            try {
-              child.kill("SIGKILL");
-            } catch {}
-          }, SIGKILL_DELAY_MS);
-        }
-      };
-
-      // Parse streaming JSON lines from stdout
-      // biome-ignore lint/style/noNonNullAssertion: stdout is guaranteed by stdio config
-      const rl = createInterface({ input: child.stdout! });
 
       rl.on("line", (line) => {
         if (!line.trim()) return;
@@ -147,18 +133,7 @@ export class ClaudeEngine implements Engine {
         });
       });
 
-      const safetyTimeout = setTimeout(() => {
-        if (!resultEvent) {
-          process.stderr.write(
-            `\n[sfk] Safety timeout reached (${SAFETY_TIMEOUT_MS / 60000} min), killing Claude process\n`,
-          );
-          killChild();
-        }
-      }, SAFETY_TIMEOUT_MS);
-
-      child.once("close", () => {
-        clearTimeout(safetyTimeout);
-      });
+      installSafetyTimeout("Claude process", () => !resultEvent);
     });
   }
 

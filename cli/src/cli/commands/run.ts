@@ -14,7 +14,7 @@ import {
 import { ClaudeEngine } from "../../engines/claude.js";
 import { CodexEngine } from "../../engines/codex.js";
 import { OpenCodeEngine } from "../../engines/opencode.js";
-import { handleSoftRateLimit } from "../../engines/rate-limit.js";
+import { handleSoftRateLimit as handleSoftRateLimitRetry } from "../../engines/rate-limit.js";
 import {
   allTasksComplete,
   countIncompleteTasks,
@@ -147,18 +147,42 @@ export interface RunOptions {
   verbose?: boolean;
 }
 
-export async function runLoop(
+interface RunSession {
+  projectName: string;
+  logFile: string;
+  progressFile: string;
+  engine: Engine;
+  testCmd: string | undefined;
+  model: string;
+}
+
+interface VerificationState {
+  consecutiveFailures: number;
+  lastFailedTask: string;
+  testFailureMode: boolean;
+  lastTestOutput: string;
+}
+
+interface VerificationDecision {
+  status: "passed" | "retry" | "exit";
+  state: VerificationState;
+}
+
+type RunMode = "loop" | "single";
+
+function initializeRunSession(
   config: Config,
   options: RunOptions,
-): Promise<void> {
+  engineOverride?: Engine,
+): RunSession {
   const projectName = basename(process.cwd());
   const logFile = join(config.logDir, `ralph-${projectName}.log`);
   const progressFile = getProgressFile(projectName, config.progressDir);
+  const model = getCurrentModel(config);
+  const engine = engineOverride ?? createEngine(config);
 
   initLogger({ logFile, verbose: options.verbose });
   initProgress(config.progressDir, progressFile);
-
-  const engine = createEngine(config);
 
   if (!engine.isAvailable()) {
     const installName = ENGINE_INSTALL_NAMES[engine.name] ?? "required CLI";
@@ -168,21 +192,32 @@ export async function runLoop(
     process.exit(1);
   }
 
-  const testCmd = config.testCmd || detectTestCommand();
+  return {
+    projectName,
+    logFile,
+    progressFile,
+    engine,
+    testCmd: config.testCmd || detectTestCommand(),
+    model,
+  };
+}
 
-  logSessionStart(projectName, config.engine, getCurrentModel(config));
+function logRunStartup(
+  config: Config,
+  session: RunSession,
+  mode: RunMode,
+): void {
+  logSessionStart(session.projectName, config.engine, session.model);
 
-  if (config.maxIterations < -1) {
-    logWarning("Invalid maxIterations value, defaulting to 10");
-    config.maxIterations = 10;
-  }
+  const modeLabel =
+    mode === "single"
+      ? "Single task mode"
+      : config.maxIterations === -1
+        ? "Infinite mode"
+        : `Max ${config.maxIterations} iterations`;
 
-  const iterStr =
-    config.maxIterations === -1
-      ? "Infinite mode"
-      : `Max ${config.maxIterations} iterations`;
-  console.log(`Starting Ralph (${config.engine}) - ${iterStr}`);
-  console.log(`Using model: ${getCurrentModel(config)}`);
+  console.log(`Starting Ralph (${config.engine}) - ${modeLabel}`);
+  console.log(`Using model: ${session.model}`);
 
   if (config.engine === "opencode" && config.ocFallModel) {
     console.log(`Fallback model: ${config.ocFallModel}`);
@@ -195,9 +230,9 @@ export async function runLoop(
   if (config.skipTestVerify) {
     console.log(pc.yellow("  Test verification DISABLED"));
     logWarning("Test verification disabled");
-  } else if (testCmd) {
-    console.log(`  Test command: ${testCmd}`);
-    logInfo(`Test command: ${testCmd}`);
+  } else if (session.testCmd) {
+    console.log(`  Test command: ${session.testCmd}`);
+    logInfo(`Test command: ${session.testCmd}`);
   } else {
     console.log(
       pc.yellow(
@@ -207,8 +242,207 @@ export async function runLoop(
     logWarning("No test command detected");
   }
 
-  console.log(`  Log file: ${logFile}`);
+  console.log(`  Log file: ${session.logFile}`);
   console.log("");
+}
+
+function nextVerificationState(
+  taskName: string,
+  state: VerificationState,
+): VerificationState {
+  if (taskName !== state.lastFailedTask) {
+    logInfo("Task changed, resetting failure counter");
+    return {
+      ...state,
+      consecutiveFailures: 1,
+      lastFailedTask: taskName,
+    };
+  }
+
+  return {
+    ...state,
+    consecutiveFailures: state.consecutiveFailures + 1,
+  };
+}
+
+function logTooManyVerificationFailures(
+  taskName: string,
+  logFile: string,
+): void {
+  logError(`Too many consecutive failures on task '${taskName}', stopping`);
+  console.log(pc.red("  Too many consecutive failures on this task"));
+  console.log(pc.red("  Manual intervention required"));
+  console.log(`  Check log: ${logFile}`);
+}
+
+function handleVerificationResult(
+  verification: ReturnType<typeof verify>,
+  config: Config,
+  progressFile: string,
+  iteration: number,
+  taskName: string,
+  logFile: string,
+  mode: RunMode,
+  state: VerificationState,
+): VerificationDecision {
+  if (!verification.testsWritten) {
+    if (mode === "single") {
+      logWarning("No tests written, single task failed");
+      appendFailure(
+        progressFile,
+        iteration,
+        "No test files were created or modified",
+        "You MUST write tests before the task can be completed",
+      );
+      return { status: "exit", state };
+    }
+
+    const nextState = nextVerificationState(taskName, state);
+    logWarning(
+      `No tests written, iteration failed (${nextState.consecutiveFailures}/${config.maxConsecutiveFailures})`,
+    );
+
+    appendFailure(
+      progressFile,
+      iteration,
+      "No test files were created or modified",
+      "You MUST write tests before the task can be completed",
+    );
+
+    if (nextState.consecutiveFailures >= config.maxConsecutiveFailures) {
+      logTooManyVerificationFailures(taskName, logFile);
+      return { status: "exit", state: nextState };
+    }
+
+    console.log(
+      `  Verification failed (${nextState.consecutiveFailures}/${config.maxConsecutiveFailures})`,
+    );
+    console.log("  Continuing to next iteration to fix...");
+    return { status: "retry", state: nextState };
+  }
+
+  if (!verification.testsPassed) {
+    if (mode === "single") {
+      logWarning("Tests failed, single task failed");
+      appendFailure(
+        progressFile,
+        iteration,
+        "Tests failed",
+        "Fix the failing tests before marking the task complete",
+      );
+      return { status: "exit", state };
+    }
+
+    const nextState = nextVerificationState(taskName, state);
+    logWarning(
+      `Tests failed, iteration failed (${nextState.consecutiveFailures}/${config.maxConsecutiveFailures})`,
+    );
+
+    appendFailure(
+      progressFile,
+      iteration,
+      "Tests failed",
+      "Fix the failing tests before marking the task complete",
+      verification.testOutput,
+    );
+
+    const retryState: VerificationState = {
+      ...nextState,
+      testFailureMode: true,
+      lastTestOutput: verification.testOutput || "",
+    };
+
+    if (retryState.consecutiveFailures >= config.maxConsecutiveFailures) {
+      logTooManyVerificationFailures(taskName, logFile);
+      return { status: "exit", state: retryState };
+    }
+
+    console.log(
+      `  Verification failed (${retryState.consecutiveFailures}/${config.maxConsecutiveFailures})`,
+    );
+    console.log("  Continuing to next iteration to fix...");
+    console.log(
+      pc.yellow("  Next iteration will use fix-tests prompt with test output"),
+    );
+    return { status: "retry", state: retryState };
+  }
+
+  logInfo("Verification passed");
+  return {
+    status: "passed",
+    state: {
+      consecutiveFailures: 0,
+      lastFailedTask: "",
+      testFailureMode: false,
+      lastTestOutput: "",
+    },
+  };
+}
+
+function handleHardRateLimit(engine: Engine): "fallback" | "exit" {
+  logWarning("Hard rate limit detected (quota/billing)");
+  console.log("  Hard rate limit: quota or billing issue");
+
+  if (engine.switchToFallback?.()) {
+    return "fallback";
+  }
+
+  logError("Hard rate limit and no fallback available");
+  console.log("  Hard rate limit and no fallback available");
+  return "exit";
+}
+
+async function handleSoftRateLimit(
+  engine: Engine,
+  softLimitRetries: number,
+  config: Config,
+): Promise<{
+  action: "retry" | "fallback" | "exit";
+  softLimitRetries: number;
+}> {
+  logWarning("Soft rate limit detected (temporary cooldown)");
+
+  if (
+    await handleSoftRateLimitRetry(
+      softLimitRetries,
+      config.softLimitRetries,
+      config.softLimitWait,
+    )
+  ) {
+    return {
+      action: "retry",
+      softLimitRetries: softLimitRetries + 1,
+    };
+  }
+
+  if (engine.switchToFallback?.()) {
+    return {
+      action: "fallback",
+      softLimitRetries: 0,
+    };
+  }
+
+  logError("Soft rate limit persisted, no fallback available");
+  console.log("  Rate limit persisted after retries, no fallback available");
+  return {
+    action: "exit",
+    softLimitRetries: 0,
+  };
+}
+
+export async function runLoop(
+  config: Config,
+  options: RunOptions,
+): Promise<void> {
+  const session = initializeRunSession(config, options);
+  const { engine, logFile, progressFile, projectName, testCmd } = session;
+
+  if (config.maxIterations < -1) {
+    logWarning("Invalid maxIterations value, defaulting to 10");
+    config.maxIterations = 10;
+  }
+
+  logRunStartup(config, session, "loop");
 
   const prompt = generatePrompt({
     skipCommit: config.skipCommit,
@@ -225,11 +459,13 @@ export async function runLoop(
   process.on("SIGTERM", () => signalHandler("SIGTERM"));
 
   let iteration = 0;
-  let consecutiveFailures = 0;
   let softLimitRetries = 0;
-  let lastFailedTask = "";
-  let testFailureMode = false;
-  let lastTestOutput = "";
+  let verificationState: VerificationState = {
+    consecutiveFailures: 0,
+    lastFailedTask: "",
+    testFailureMode: false,
+    lastTestOutput: "",
+  };
 
   while (config.maxIterations === -1 || iteration < config.maxIterations) {
     if (interrupted) {
@@ -270,14 +506,14 @@ export async function runLoop(
     const headBefore = getHeadSha();
 
     logIteration(iteration, config.maxIterations, taskName, engine.model);
-    if (testFailureMode) {
+    if (verificationState.testFailureMode) {
       console.log(pc.yellow("  Mode: FIX TESTS"));
     }
 
     const currentPrompt =
-      testFailureMode && lastTestOutput
+      verificationState.testFailureMode && verificationState.lastTestOutput
         ? generateFixTestsPrompt({
-            testOutput: lastTestOutput,
+            testOutput: verificationState.lastTestOutput,
             skipCommit: config.skipCommit,
             progressFile,
           })
@@ -290,46 +526,28 @@ export async function runLoop(
     // Rate limit handling (OpenCode only)
     if (config.engine === "opencode") {
       if (result.hardRateLimited) {
-        logWarning("Hard rate limit detected (quota/billing)");
-        console.log("  Hard rate limit: quota or billing issue");
         softLimitRetries = 0;
-
-        if (engine.switchToFallback?.()) {
+        if (handleHardRateLimit(engine) === "fallback") {
           iteration--;
           continue;
-        } else {
-          logError("Hard rate limit and no fallback available");
-          console.log("  Hard rate limit and no fallback available");
-          process.exit(1);
         }
+        process.exit(1);
       }
 
       if (result.softRateLimited) {
-        logWarning("Soft rate limit detected (temporary cooldown)");
+        const rateLimitResolution = await handleSoftRateLimit(
+          engine,
+          softLimitRetries,
+          config,
+        );
+        softLimitRetries = rateLimitResolution.softLimitRetries;
 
-        if (
-          await handleSoftRateLimit(
-            softLimitRetries,
-            config.softLimitRetries,
-            config.softLimitWait,
-          )
-        ) {
-          softLimitRetries++;
+        if (rateLimitResolution.action !== "exit") {
           iteration--;
           continue;
-        } else {
-          softLimitRetries = 0;
-          if (engine.switchToFallback?.()) {
-            iteration--;
-            continue;
-          } else {
-            logError("Soft rate limit persisted, no fallback available");
-            console.log(
-              "  Rate limit persisted after retries, no fallback available",
-            );
-            process.exit(1);
-          }
         }
+
+        process.exit(1);
       }
 
       softLimitRetries = 0;
@@ -343,97 +561,26 @@ export async function runLoop(
     // Test verification gate
     if (!config.skipTestVerify && testCmd) {
       const verification = verify(testCmd);
+      const decision = handleVerificationResult(
+        verification,
+        config,
+        progressFile,
+        iteration,
+        taskName,
+        logFile,
+        "loop",
+        verificationState,
+      );
+      verificationState = decision.state;
 
-      if (!verification.testsWritten) {
-        if (taskName !== lastFailedTask) {
-          consecutiveFailures = 1;
-          lastFailedTask = taskName;
-          logInfo("Task changed, resetting failure counter");
-        } else {
-          consecutiveFailures++;
-        }
+      if (decision.status === "exit") {
+        process.exit(1);
+      }
 
-        logWarning(
-          `No tests written, iteration failed (${consecutiveFailures}/${config.maxConsecutiveFailures})`,
-        );
-
-        appendFailure(
-          progressFile,
-          iteration,
-          "No test files were created or modified",
-          "You MUST write tests before the task can be completed",
-        );
-
-        if (consecutiveFailures >= config.maxConsecutiveFailures) {
-          logError(
-            `Too many consecutive failures on task '${taskName}', stopping`,
-          );
-          console.log(pc.red("  Too many consecutive failures on this task"));
-          console.log(pc.red("  Manual intervention required"));
-          console.log(`  Check log: ${logFile}`);
-          process.exit(1);
-        }
-
-        console.log(
-          `  Verification failed (${consecutiveFailures}/${config.maxConsecutiveFailures})`,
-        );
-        console.log("  Continuing to next iteration to fix...");
+      if (decision.status === "retry") {
         await sleep(config.sleepSeconds);
         continue;
       }
-
-      if (!verification.testsPassed) {
-        if (taskName !== lastFailedTask) {
-          consecutiveFailures = 1;
-          lastFailedTask = taskName;
-          logInfo("Task changed, resetting failure counter");
-        } else {
-          consecutiveFailures++;
-        }
-
-        logWarning(
-          `Tests failed, iteration failed (${consecutiveFailures}/${config.maxConsecutiveFailures})`,
-        );
-
-        testFailureMode = true;
-        lastTestOutput = verification.testOutput || "";
-
-        appendFailure(
-          progressFile,
-          iteration,
-          "Tests failed",
-          "Fix the failing tests before marking the task complete",
-          verification.testOutput,
-        );
-
-        if (consecutiveFailures >= config.maxConsecutiveFailures) {
-          logError(
-            `Too many consecutive failures on task '${taskName}', stopping`,
-          );
-          console.log(pc.red("  Too many consecutive failures on this task"));
-          console.log(pc.red("  Manual intervention required"));
-          console.log(`  Check log: ${logFile}`);
-          process.exit(1);
-        }
-
-        console.log(
-          `  Verification failed (${consecutiveFailures}/${config.maxConsecutiveFailures})`,
-        );
-        console.log("  Continuing to next iteration to fix...");
-        console.log(
-          pc.yellow(
-            "  Next iteration will use fix-tests prompt with test output",
-          ),
-        );
-        await sleep(config.sleepSeconds);
-        continue;
-      }
-
-      consecutiveFailures = 0;
-      lastFailedTask = "";
-      testFailureMode = false;
-      lastTestOutput = "";
-      logInfo("Verification passed");
     }
 
     // Push after commit
@@ -541,55 +688,9 @@ export async function runSingleTask(
   task: string,
   engineOverride?: Engine,
 ): Promise<void> {
-  const projectName = basename(process.cwd());
-  const logFile = join(config.logDir, `ralph-${projectName}.log`);
-  const progressFile = getProgressFile(projectName, config.progressDir);
-
-  initLogger({ logFile, verbose: options.verbose });
-  initProgress(config.progressDir, progressFile);
-
-  const engine: Engine = engineOverride ?? createEngine(config);
-
-  if (!engine.isAvailable()) {
-    const installName = ENGINE_INSTALL_NAMES[engine.name] ?? "required CLI";
-    logError(
-      `'${engine.name}' command not found. Please install ${installName}.`,
-    );
-    process.exit(1);
-  }
-
-  const testCmd = config.testCmd || detectTestCommand();
-
-  logSessionStart(projectName, config.engine, getCurrentModel(config));
-
-  console.log(`Starting Ralph (${config.engine}) - Single task mode`);
-  console.log(`Using model: ${getCurrentModel(config)}`);
-
-  if (config.engine === "opencode" && config.ocFallModel) {
-    console.log(`Fallback model: ${config.ocFallModel}`);
-  }
-
-  if (config.skipCommit) {
-    console.log("Commits disabled for this run");
-  }
-
-  if (config.skipTestVerify) {
-    console.log(pc.yellow("  Test verification DISABLED"));
-    logWarning("Test verification disabled");
-  } else if (testCmd) {
-    console.log(`  Test command: ${testCmd}`);
-    logInfo(`Test command: ${testCmd}`);
-  } else {
-    console.log(
-      pc.yellow(
-        "  No test command detected (configure test-cmd in .sfk/config)",
-      ),
-    );
-    logWarning("No test command detected");
-  }
-
-  console.log(`  Log file: ${logFile}`);
-  console.log("");
+  const session = initializeRunSession(config, options, engineOverride);
+  const { engine, logFile, progressFile, testCmd } = session;
+  logRunStartup(config, session, "single");
 
   const prompt = generateSingleTaskPrompt(task, {
     skipCommit: config.skipCommit,
@@ -611,41 +712,38 @@ export async function runSingleTask(
 
     while (result.softRateLimited || result.hardRateLimited) {
       if (result.hardRateLimited) {
-        logWarning("Hard rate limit detected (quota/billing)");
-        if (engine.switchToFallback?.()) {
+        if (handleHardRateLimit(engine) === "fallback") {
           result = await engine.run(prompt);
           logAiOutput(result.output);
           console.log("");
           break;
-        } else {
-          logError("Hard rate limit and no fallback available");
-          process.exit(1);
         }
+        process.exit(1);
       }
 
       if (result.softRateLimited) {
-        if (
-          await handleSoftRateLimit(
-            softRetries,
-            config.softLimitRetries,
-            config.softLimitWait,
-          )
-        ) {
-          softRetries++;
+        const rateLimitResolution = await handleSoftRateLimit(
+          engine,
+          softRetries,
+          config,
+        );
+        softRetries = rateLimitResolution.softLimitRetries;
+
+        if (rateLimitResolution.action === "retry") {
           result = await engine.run(prompt);
           logAiOutput(result.output);
           console.log("");
-        } else {
-          if (engine.switchToFallback?.()) {
-            result = await engine.run(prompt);
-            logAiOutput(result.output);
-            console.log("");
-            break;
-          } else {
-            logError("Soft rate limit persisted, no fallback available");
-            process.exit(1);
-          }
+          continue;
         }
+
+        if (rateLimitResolution.action === "fallback") {
+          result = await engine.run(prompt);
+          logAiOutput(result.output);
+          console.log("");
+          break;
+        }
+
+        process.exit(1);
       }
     }
   }
@@ -658,30 +756,25 @@ export async function runSingleTask(
   // Test verification gate
   if (!config.skipTestVerify && testCmd) {
     const verification = verify(testCmd);
+    const decision = handleVerificationResult(
+      verification,
+      config,
+      progressFile,
+      1,
+      task,
+      logFile,
+      "single",
+      {
+        consecutiveFailures: 0,
+        lastFailedTask: "",
+        testFailureMode: false,
+        lastTestOutput: "",
+      },
+    );
 
-    if (!verification.testsWritten) {
-      logWarning("No tests written, single task failed");
-      appendFailure(
-        progressFile,
-        1,
-        "No test files were created or modified",
-        "You MUST write tests before the task can be completed",
-      );
+    if (decision.status !== "passed") {
       process.exit(1);
     }
-
-    if (!verification.testsPassed) {
-      logWarning("Tests failed, single task failed");
-      appendFailure(
-        progressFile,
-        1,
-        "Tests failed",
-        "Fix the failing tests before marking the task complete",
-      );
-      process.exit(1);
-    }
-
-    logInfo("Verification passed");
   }
 
   logSuccess("Single task completed successfully!");

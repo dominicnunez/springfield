@@ -1,8 +1,6 @@
-import * as childProcess from "node:child_process";
-import { createInterface } from "node:readline";
 import { logWarning } from "../ui/logger.js";
 import type { Engine, EngineResult } from "./base.js";
-import { SAFETY_TIMEOUT_MS, SIGKILL_DELAY_MS } from "./constants.js";
+import { commandExists, spawnLineProcess } from "./process.js";
 
 interface CodexItem {
   type?: string;
@@ -29,10 +27,7 @@ export class CodexEngine implements Engine {
   }
 
   isAvailable(): boolean {
-    const result = childProcess.spawnSync("which", ["codex"], {
-      encoding: "utf-8",
-    });
-    return result.status === 0;
+    return commandExists("codex");
   }
 
   async run(prompt: string): Promise<EngineResult> {
@@ -49,38 +44,26 @@ export class CodexEngine implements Engine {
     args.push(prompt);
 
     return new Promise<EngineResult>((resolve) => {
-      const child = childProcess.spawn("codex", args, {
-        cwd: process.cwd(),
-        stdio: ["ignore", "pipe", "pipe"],
-      });
+      const processResult = spawnLineProcess("codex", args, [
+        "ignore",
+        "pipe",
+        "pipe",
+      ]);
 
-      const outputLines: string[] = [];
-      let stderr = "";
-      let sawErrorEvent = false;
-      let killed = false;
-
-      const killChild = () => {
-        if (killed) return;
-        killed = true;
-        child.kill("SIGTERM");
-        setTimeout(() => {
-          try {
-            child.kill("SIGKILL");
-          } catch {}
-        }, SIGKILL_DELAY_MS);
-      };
-
-      if (!child.stdout) {
-        child.kill();
+      if ("error" in processResult) {
         resolve({
           success: false,
-          output: "Failed to spawn codex: no stdout",
+          output: processResult.error,
           exitCode: 1,
         });
         return;
       }
 
-      const rl = createInterface({ input: child.stdout });
+      const { child, rl, killChild, installSafetyTimeout } = processResult;
+
+      const outputLines: string[] = [];
+      let stderr = "";
+      let sawErrorEvent = false;
 
       rl.on("line", (line) => {
         if (!line.trim()) return;
@@ -132,16 +115,7 @@ export class CodexEngine implements Engine {
         });
       });
 
-      const safetyTimeout = setTimeout(() => {
-        process.stderr.write(
-          `\n[sfk] Safety timeout reached (${SAFETY_TIMEOUT_MS / 60000} min), killing Codex process\n`,
-        );
-        killChild();
-      }, SAFETY_TIMEOUT_MS);
-
-      child.once("close", () => {
-        clearTimeout(safetyTimeout);
-      });
+      installSafetyTimeout("Codex process");
     });
   }
 
