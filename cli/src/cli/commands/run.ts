@@ -34,7 +34,7 @@ import {
   logSuccess,
   logWarning,
 } from "../../ui/logger.js";
-import { createRalphEngine, getEngineInstallName } from "../engine-factory.js";
+import { initializeRalphEngine } from "../engine-factory.js";
 import { runGitStdout } from "../git.js";
 import { notify } from "../notify.js";
 import { resolveRunRateLimitAction } from "../run-rate-limit.js";
@@ -133,16 +133,17 @@ function initializeRunSession(
   const logFile = join(config.logDir, `ralph-${projectName}.log`);
   const progressFile = getProgressFile(projectName, config.progressDir);
   const model = getCurrentModel(config);
-  const engine = engineOverride ?? createRalphEngine(config);
+  const engine = initializeRalphEngine(
+    config,
+    (engineName, cliName) =>
+      `'${engineName}' command not found. Please install ${cliName}.`,
+    engineOverride,
+  );
 
   initLogger({ logFile, verbose: options.verbose });
   initProgress(config.progressDir, progressFile);
 
-  if (!engine.isAvailable()) {
-    const installName = getEngineInstallName(engine.name);
-    logError(
-      `'${engine.name}' command not found. Please install ${installName}.`,
-    );
+  if (!engine) {
     process.exit(1);
   }
 

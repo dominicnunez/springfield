@@ -11,6 +11,34 @@ import {
   verify,
 } from "../verification.js";
 
+function runGit(tempDir: string, args: string[]): void {
+  spawnSync("git", args, { cwd: tempDir, stdio: "pipe" });
+}
+
+function initTempGitRepo(tempDir: string): void {
+  runGit(tempDir, ["init"]);
+  runGit(tempDir, ["config", "user.email", "test@test.com"]);
+  runGit(tempDir, ["config", "user.name", "Test"]);
+  writeFileSync(join(tempDir, "README.md"), "init");
+  runGit(tempDir, ["add", "."]);
+  runGit(tempDir, ["commit", "-m", "init"]);
+}
+
+function stageFiles(tempDir: string, ...files: string[]): void {
+  runGit(tempDir, ["add", ...files]);
+}
+
+function commitFiles(
+  tempDir: string,
+  message: string,
+  ...files: string[]
+): void {
+  if (files.length > 0) {
+    stageFiles(tempDir, ...files);
+  }
+  runGit(tempDir, ["commit", "-m", message]);
+}
+
 describe("tasks/verification", () => {
   let tempDir: string;
   let originalCwd: string;
@@ -131,33 +159,12 @@ describe("tasks/verification", () => {
 
   describe("getChangedTestFiles", () => {
     beforeEach(() => {
-      // Initialize a git repo in the temp dir
-      spawnSync("git", ["init"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["config", "user.email", "test@test.com"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
-      spawnSync("git", ["config", "user.name", "Test"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
-
-      // Create initial commit so HEAD exists
-      writeFileSync(join(tempDir, "README.md"), "init");
-      spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "init"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
+      initTempGitRepo(tempDir);
     });
 
     test("detects unstaged test file changes", () => {
       writeFileSync(join(tempDir, "app.test.ts"), "test('a', () => {})");
-      spawnSync("git", ["add", "app.test.ts"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "add test"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
+      commitFiles(tempDir, "add test", "app.test.ts");
 
       // Modify the test file (unstaged change vs HEAD)
       writeFileSync(join(tempDir, "app.test.ts"), "test('b', () => {})");
@@ -168,10 +175,7 @@ describe("tasks/verification", () => {
 
     test("detects staged test file changes", () => {
       writeFileSync(join(tempDir, "widget.spec.js"), "describe('x', () => {})");
-      spawnSync("git", ["add", "widget.spec.js"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
+      stageFiles(tempDir, "widget.spec.js");
 
       const files = getChangedTestFiles();
       expect(files).toContain("widget.spec.js");
@@ -179,14 +183,7 @@ describe("tasks/verification", () => {
 
     test("detects test files in last commit", () => {
       writeFileSync(join(tempDir, "handler_test.go"), "package main");
-      spawnSync("git", ["add", "handler_test.go"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
-      spawnSync("git", ["commit", "-m", "add go test"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
+      commitFiles(tempDir, "add go test", "handler_test.go");
 
       const files = getChangedTestFiles();
       expect(files).toContain("handler_test.go");
@@ -194,7 +191,7 @@ describe("tasks/verification", () => {
 
     test("ignores non-test files", () => {
       writeFileSync(join(tempDir, "app.ts"), "const x = 1;");
-      spawnSync("git", ["add", "app.ts"], { cwd: tempDir, stdio: "pipe" });
+      stageFiles(tempDir, "app.ts");
 
       const files = getChangedTestFiles();
       expect(files).not.toContain("app.ts");
@@ -203,11 +200,7 @@ describe("tasks/verification", () => {
     test("deduplicates files found in multiple sources", () => {
       // Create, stage, AND commit the same test file
       writeFileSync(join(tempDir, "dup.test.ts"), "v1");
-      spawnSync("git", ["add", "dup.test.ts"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "add dup"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
+      commitFiles(tempDir, "add dup", "dup.test.ts");
 
       // Now modify it (shows in both HEAD diff and unstaged)
       writeFileSync(join(tempDir, "dup.test.ts"), "v2");
@@ -219,10 +212,7 @@ describe("tasks/verification", () => {
 
     test("matches python test patterns", () => {
       writeFileSync(join(tempDir, "test_utils.py"), "def test_foo(): pass");
-      spawnSync("git", ["add", "test_utils.py"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
+      stageFiles(tempDir, "test_utils.py");
 
       const files = getChangedTestFiles();
       expect(files).toContain("test_utils.py");
@@ -230,7 +220,7 @@ describe("tasks/verification", () => {
 
     test("returns empty array when no test files changed", () => {
       writeFileSync(join(tempDir, "main.ts"), "console.log('hi')");
-      spawnSync("git", ["add", "main.ts"], { cwd: tempDir, stdio: "pipe" });
+      stageFiles(tempDir, "main.ts");
 
       const files = getChangedTestFiles();
       expect(files).toEqual([]);
@@ -382,22 +372,7 @@ describe("tasks/verification", () => {
     });
 
     test("reports testsWritten=false when no test files changed", () => {
-      // Initialize git repo
-      spawnSync("git", ["init"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["config", "user.email", "test@test.com"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
-      spawnSync("git", ["config", "user.name", "Test"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
-      writeFileSync(join(tempDir, "README.md"), "init");
-      spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "init"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
+      initTempGitRepo(tempDir);
 
       const result = verify("echo 'tests pass'");
 
@@ -407,25 +382,10 @@ describe("tasks/verification", () => {
     });
 
     test("runs test command and reports pass", () => {
-      // Initialize git repo with a test file change
-      spawnSync("git", ["init"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["config", "user.email", "test@test.com"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
-      spawnSync("git", ["config", "user.name", "Test"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
-      writeFileSync(join(tempDir, "README.md"), "init");
-      spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "init"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
+      initTempGitRepo(tempDir);
 
       writeFileSync(join(tempDir, "app.test.ts"), "test('a', () => {})");
-      spawnSync("git", ["add", "app.test.ts"], { cwd: tempDir, stdio: "pipe" });
+      stageFiles(tempDir, "app.test.ts");
 
       const result = verify("echo 'all tests passed'");
 
@@ -435,24 +395,10 @@ describe("tasks/verification", () => {
     });
 
     test("runs test command and reports failure", () => {
-      spawnSync("git", ["init"], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["config", "user.email", "test@test.com"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
-      spawnSync("git", ["config", "user.name", "Test"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
-      writeFileSync(join(tempDir, "README.md"), "init");
-      spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
-      spawnSync("git", ["commit", "-m", "init"], {
-        cwd: tempDir,
-        stdio: "pipe",
-      });
+      initTempGitRepo(tempDir);
 
       writeFileSync(join(tempDir, "app.test.ts"), "test('a', () => {})");
-      spawnSync("git", ["add", "app.test.ts"], { cwd: tempDir, stdio: "pipe" });
+      stageFiles(tempDir, "app.test.ts");
 
       const result = verify("exit 1");
 

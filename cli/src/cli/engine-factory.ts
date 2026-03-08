@@ -47,6 +47,22 @@ export function createWillieEngine(config: Config): Engine {
   return new ClaudeEngine(model, getWillieEffort(config));
 }
 
+export function initializeRalphEngine(
+  config: Config,
+  buildUnavailableMessage: (engineName: string, cliName: string) => string,
+  engineOverride?: Engine,
+): Engine | null {
+  const engine = engineOverride ?? createRalphEngine(config);
+
+  if (!engine.isAvailable()) {
+    const cliName = getEngineInstallName(engine.name);
+    logError(buildUnavailableMessage(engine.name, cliName));
+    return null;
+  }
+
+  return engine;
+}
+
 export function initializeWillieEngine(
   config: Config,
   buildUnavailableMessage: (engineName: string, cliName: string) => string,

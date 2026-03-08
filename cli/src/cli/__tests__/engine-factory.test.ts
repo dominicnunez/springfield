@@ -11,6 +11,7 @@ import {
   createRalphEngine,
   createWillieEngine,
   getEngineInstallName,
+  initializeRalphEngine,
   initializeWillieEngine,
 } from "../engine-factory.js";
 
@@ -130,6 +131,42 @@ describe("engine factory", () => {
     expect(initializeWillieEngine(baseConfig(), () => "unused", engine)).toBe(
       engine,
     );
+  });
+
+  test("initializeRalphEngine returns the engine when available", () => {
+    const engine: Engine = {
+      name: "stub",
+      model: "stub-model",
+      isAvailable: () => true,
+      run: async () => ({ success: true, output: "", exitCode: 0 }),
+      switchToFallback: () => false,
+    };
+
+    expect(initializeRalphEngine(baseConfig(), () => "unused", engine)).toBe(
+      engine,
+    );
+  });
+
+  test("initializeRalphEngine logs the caller-specific unavailable message", () => {
+    const engine: Engine = {
+      name: "stub",
+      model: "stub-model",
+      isAvailable: () => false,
+      run: async () => ({ success: true, output: "", exitCode: 0 }),
+      switchToFallback: () => false,
+    };
+    const logSpy = spyOn(logger, "logError").mockImplementation(() => {});
+
+    expect(
+      initializeRalphEngine(
+        baseConfig(),
+        (engineName, cliName) => `${engineName} install ${cliName}`,
+        engine,
+      ),
+    ).toBeNull();
+    expect(logSpy).toHaveBeenCalledWith("stub install stub CLI");
+
+    logSpy.mockRestore();
   });
 
   test("initializeWillieEngine logs the caller-specific unavailable message", () => {
