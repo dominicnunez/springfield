@@ -87,7 +87,7 @@ type = opencode
 
 [models]
 claude = sonnet
-claude-effort = high        # global effort default: low|medium|high|xhigh
+effort = high               # global effort default: low|medium|high|xhigh
 # codex = gpt-5-codex
 opencode-primary = big-pickle
 

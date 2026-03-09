@@ -68,7 +68,7 @@ type = opencode
 
 [models]
 claude = sonnet
-claude-effort = high        # global effort default: low|medium|high|xhigh
+effort = high               # global effort default: low|medium|high|xhigh
 # Claude supports only low|medium|high and errors on xhigh
 # codex =
 opencode-primary = opencode/glm-5-free
@@ -127,7 +127,9 @@ export function parseConfigFile(content: string): Record<string, string> {
     }
 
     const key = trimmed.slice(0, eqIndex).trim();
-    const value = removeQuotes(trimmed.slice(eqIndex + 1).trim());
+    const value = removeQuotes(
+      stripInlineComment(trimmed.slice(eqIndex + 1).trim()),
+    );
 
     const fullKey = currentSection ? `${currentSection}.${key}` : key;
     result[fullKey] = value;
@@ -174,6 +176,28 @@ function removeQuotes(value: string): string {
   return value;
 }
 
+function stripInlineComment(value: string): string {
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+
+  for (let i = 0; i < value.length; i += 1) {
+    const char = value[i];
+    if (char === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+    if (char === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+    if (char === "#" && !inSingleQuote && !inDoubleQuote) {
+      return value.slice(0, i).trimEnd();
+    }
+  }
+
+  return value;
+}
+
 function parseIntSafe(value: string, defaultVal: number): number {
   const parsed = parseInt(value, 10);
   return Number.isNaN(parsed) ? defaultVal : parsed;
@@ -214,8 +238,8 @@ export function applyConfigToConfig(
 
   // [models]
   if (parsed["models.claude"]) config.claudeModel = parsed["models.claude"];
-  if (parsed["models.claude-effort"]) {
-    const effort = parseEffort(parsed["models.claude-effort"]);
+  if (parsed["models.effort"]) {
+    const effort = parseEffort(parsed["models.effort"]);
     if (effort) config.claudeEffort = effort;
   }
   if (parsed["models.codex"]?.trim())

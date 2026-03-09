@@ -93,6 +93,26 @@ test-cmd = KEY=VAL bun test
       expect(result["ralph.test-cmd"]).toBe("KEY=VAL bun test");
     });
 
+    test("strips trailing inline comments from unquoted values", () => {
+      const result = parseConfigFile(`
+[models]
+effort = high # global default
+
+[ralph]
+skip-commit = false # keep commits enabled
+`);
+      expect(result["models.effort"]).toBe("high");
+      expect(result["ralph.skip-commit"]).toBe("false");
+    });
+
+    test("preserves # inside quoted values", () => {
+      const result = parseConfigFile(`
+[ralph]
+test-cmd = "bun test --grep #smoke"
+`);
+      expect(result["ralph.test-cmd"]).toBe("bun test --grep #smoke");
+    });
+
     test("handles keys without a section", () => {
       const result = parseConfigFile(`
 standalone = value
@@ -115,7 +135,7 @@ type = claude
 
 [models]
 claude = opus
-claude-effort = medium
+effort = medium
 codex = gpt-5-codex
 opencode-primary = gpt-5
 opencode-fallback = gpt-4
@@ -149,7 +169,7 @@ progress-dir = /tmp/progress
 
       expect(result["engine.type"]).toBe("claude");
       expect(result["models.claude"]).toBe("opus");
-      expect(result["models.claude-effort"]).toBe("medium");
+      expect(result["models.effort"]).toBe("medium");
       expect(result["models.codex"]).toBe("gpt-5-codex");
       expect(result["models.opencode-primary"]).toBe("gpt-5");
       expect(result["models.opencode-fallback"]).toBe("gpt-4");
@@ -191,7 +211,7 @@ progress-dir = /tmp/progress
       const config = baseConfig();
       applyConfigToConfig(config, {
         "models.claude": "opus",
-        "models.claude-effort": "medium",
+        "models.effort": "medium",
         "models.codex": "gpt-5",
         "models.opencode-primary": "gpt-5",
         "models.opencode-fallback": "gpt-4",
@@ -205,13 +225,13 @@ progress-dir = /tmp/progress
 
     test("ignores invalid effort level", () => {
       const config = baseConfig();
-      applyConfigToConfig(config, { "models.claude-effort": "turbo" });
+      applyConfigToConfig(config, { "models.effort": "turbo" });
       expect(config.claudeEffort).toBe("high"); // unchanged
     });
 
     test("accepts xhigh effort level", () => {
       const config = baseConfig();
-      applyConfigToConfig(config, { "models.claude-effort": "xhigh" });
+      applyConfigToConfig(config, { "models.effort": "xhigh" });
       expect(config.claudeEffort).toBe("xhigh");
     });
 

@@ -20,7 +20,7 @@ type = opencode
 
 [models]
 claude = sonnet
-claude-effort = high        # global effort default: low|medium|high|xhigh
+effort = high               # global effort default: low|medium|high|xhigh
 # Claude supports only low|medium|high and errors on xhigh
 opencode-primary = opencode/glm-5-free
 # opencode-fallback =
