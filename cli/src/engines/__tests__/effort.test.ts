@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { EffortLevel } from "../../config/loader.js";
-import {
-  InvalidEffortLevelError,
-  getEngineEffortConfig,
-} from "../effort.js";
+import { getEngineEffortConfig, InvalidEffortLevelError } from "../effort.js";
 
 describe("engine effort helpers", () => {
   test("returns Claude env config for supported effort", () => {
