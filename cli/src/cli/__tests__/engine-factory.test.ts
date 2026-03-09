@@ -87,6 +87,7 @@ describe("engine factory", () => {
 
     expect(engine).toBeInstanceOf(CodexEngine);
     expect(engine.model).toBe("default");
+    expect((engine as unknown as { effort: string }).effort).toBe("medium");
   });
 
   test("creates OpenCode engines with fallback wiring intact", () => {
@@ -108,8 +109,12 @@ describe("engine factory", () => {
 
     expect(ralphEngine).toBeInstanceOf(OpenCodeEngine);
     expect(ralphEngine.model).toBe("primary");
+    expect((ralphEngine as unknown as { effort: string }).effort).toBe("low");
     expect(willieEngine).toBeInstanceOf(OpenCodeEngine);
     expect(willieEngine.model).toBe("audit-model");
+    expect((willieEngine as unknown as { effort: string }).effort).toBe(
+      "medium",
+    );
     expect((willieEngine as OpenCodeEngine).switchToFallback()).toBe(true);
   });
 
@@ -187,6 +192,44 @@ describe("engine factory", () => {
       ),
     ).toBeNull();
     expect(logSpy).toHaveBeenCalledWith("stub needs stub CLI");
+
+    logSpy.mockRestore();
+  });
+
+  test("initializeRalphEngine logs invalid effort for the selected engine", () => {
+    const logSpy = spyOn(logger, "logError").mockImplementation(() => {});
+
+    expect(
+      initializeRalphEngine(
+        baseConfig({
+          engine: "claude",
+          ralphEffort: "xhigh",
+        }),
+        () => "unused",
+      ),
+    ).toBeNull();
+    expect(logSpy).toHaveBeenCalledWith(
+      'Invalid effort level "xhigh" for claude. Supported levels: low, medium, high.',
+    );
+
+    logSpy.mockRestore();
+  });
+
+  test("initializeWillieEngine logs invalid effort for the selected engine", () => {
+    const logSpy = spyOn(logger, "logError").mockImplementation(() => {});
+
+    expect(
+      initializeWillieEngine(
+        baseConfig({
+          engine: "claude",
+          willieEffort: "xhigh",
+        }),
+        () => "unused",
+      ),
+    ).toBeNull();
+    expect(logSpy).toHaveBeenCalledWith(
+      'Invalid effort level "xhigh" for claude. Supported levels: low, medium, high.',
+    );
 
     logSpy.mockRestore();
   });

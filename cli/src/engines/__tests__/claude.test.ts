@@ -199,7 +199,31 @@ describe("ClaudeEngine", () => {
           "-p",
           "test prompt",
         ],
-        expect.objectContaining({ stdio: ["ignore", "pipe", "pipe"] }),
+        expect.objectContaining({
+          stdio: ["ignore", "pipe", "pipe"],
+          env: expect.objectContaining({
+            CLAUDE_CODE_EFFORT_LEVEL: "high",
+          }),
+        }),
+      );
+    });
+
+    test("passes configured effort through env", async () => {
+      const mock = createMockChild([resultEvent("done")]);
+      spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
+        mock as unknown as ReturnType<typeof childProcess.spawn>,
+      );
+
+      await new ClaudeEngine("sonnet", "medium").run("test prompt");
+
+      expect(spawnSpy).toHaveBeenCalledWith(
+        "claude",
+        expect.any(Array),
+        expect.objectContaining({
+          env: expect.objectContaining({
+            CLAUDE_CODE_EFFORT_LEVEL: "medium",
+          }),
+        }),
       );
     });
 

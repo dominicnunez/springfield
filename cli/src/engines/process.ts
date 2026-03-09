@@ -24,9 +24,11 @@ export function spawnLineProcess(
   command: string,
   args: string[],
   stdio: childProcess.StdioOptions,
+  env?: NodeJS.ProcessEnv,
 ): LineProcess | { error: string } {
   const child = childProcess.spawn(command, args, {
     cwd: process.cwd(),
+    env,
     stdio,
   });
 

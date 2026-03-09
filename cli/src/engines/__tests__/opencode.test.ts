@@ -299,7 +299,43 @@ describe("OpenCodeEngine", () => {
 
       expect(spawnSpy).toHaveBeenCalledWith(
         "opencode",
-        ["run", "--format", "json", "--model", "test-model", "test prompt"],
+        [
+          "run",
+          "--format",
+          "json",
+          "--model",
+          "test-model",
+          "--variant",
+          "high",
+          "test prompt",
+        ],
+        expect.objectContaining({
+          cwd: process.cwd(),
+        }),
+      );
+    });
+
+    test("passes xhigh effort as variant", async () => {
+      const mockChild = createMockChild([stepFinishEvent()]);
+      spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
+        mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+      );
+
+      const engine = new OpenCodeEngine("test-model", undefined, "xhigh");
+      await engine.run("test prompt");
+
+      expect(spawnSpy).toHaveBeenCalledWith(
+        "opencode",
+        [
+          "run",
+          "--format",
+          "json",
+          "--model",
+          "test-model",
+          "--variant",
+          "xhigh",
+          "test prompt",
+        ],
         expect.objectContaining({
           cwd: process.cwd(),
         }),

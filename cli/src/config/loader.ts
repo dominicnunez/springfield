@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { logWarning } from "../ui/logger.js";
 
 export type EngineType = "opencode" | "claude" | "codex";
-export type EffortLevel = "high" | "medium" | "low";
+export type EffortLevel = "high" | "medium" | "low" | "xhigh";
 
 export const DEFAULT_OC_PRIME_MODEL = "big-pickle";
 
@@ -68,7 +68,8 @@ type = opencode
 
 [models]
 claude = sonnet
-claude-effort = high
+claude-effort = high        # global effort default: low|medium|high|xhigh
+# Claude supports only low|medium|high and errors on xhigh
 # codex =
 opencode-primary = opencode/glm-5-free
 # opencode-fallback =
@@ -86,13 +87,13 @@ skip-test-verify = false
 max-consecutive-failures = 3
 # test-cmd =
 # model = sonnet
-# effort = high
+# effort = high             # overrides the global effort for Ralph
 
 [willie]
 max-iterations = 0
 # audit-prompt = audit/prompt.md
 # lint-cmd =
-# effort = high
+# effort = high             # overrides the global effort for Willie
 
 [logging]
 # log-dir = ~/.sfk/logs
@@ -179,7 +180,14 @@ function parseIntSafe(value: string, defaultVal: number): number {
 }
 
 function parseEffort(value: string): EffortLevel | undefined {
-  if (value === "high" || value === "medium" || value === "low") return value;
+  if (
+    value === "high" ||
+    value === "medium" ||
+    value === "low" ||
+    value === "xhigh"
+  ) {
+    return value;
+  }
   return undefined;
 }
 

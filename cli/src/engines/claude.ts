@@ -1,5 +1,6 @@
 import type { EffortLevel } from "../config/loader.js";
 import type { Engine, EngineResult } from "./base.js";
+import { getEngineEffortConfig } from "./effort.js";
 import { commandExists, spawnLineProcess } from "./process.js";
 
 export class ClaudeEngine implements Engine {
@@ -17,6 +18,7 @@ export class ClaudeEngine implements Engine {
   }
 
   async run(prompt: string): Promise<EngineResult> {
+    const effortConfig = getEngineEffortConfig("claude", this.effort);
     const args = [
       "--model",
       this.model,
@@ -30,11 +32,12 @@ export class ClaudeEngine implements Engine {
     ];
 
     return new Promise<EngineResult>((resolve) => {
-      const processResult = spawnLineProcess("claude", args, [
-        "ignore",
-        "pipe",
-        "pipe",
-      ]);
+      const processResult = spawnLineProcess(
+        "claude",
+        args,
+        ["ignore", "pipe", "pipe"],
+        { ...process.env, ...effortConfig.env },
+      );
 
       if ("error" in processResult) {
         resolve({
@@ -47,7 +50,6 @@ export class ClaudeEngine implements Engine {
       }
 
       const { child, rl, killChild, installSafetyTimeout } = processResult;
-
       let output = "";
       // biome-ignore lint/suspicious/noExplicitAny: Claude stream events have varying shapes
       let resultEvent: any = null;
@@ -59,7 +61,6 @@ export class ClaudeEngine implements Engine {
         try {
           const event = JSON.parse(line);
 
-          // Collect text deltas for output
           if (
             event.type === "stream_event" &&
             event.event?.type === "content_block_delta" &&
@@ -70,7 +71,6 @@ export class ClaudeEngine implements Engine {
             output += text;
           }
 
-          // Capture full assistant messages
           if (event.type === "assistant" && event.message?.content) {
             for (const block of event.message.content) {
               if (block.type === "text") {
@@ -79,24 +79,19 @@ export class ClaudeEngine implements Engine {
             }
           }
 
-          // Detect result event — Claude is done, kill process
           if (event.type === "result") {
             resultEvent = event;
             if (event.result) {
               output = event.result;
             }
-            // Claude CLI hangs after result event (known bug #25629)
-            // Kill it ourselves since it won't exit cleanly
             killChild();
           }
         } catch {
-          // Non-JSON line, append to output
           output += `${line}\n`;
           process.stdout.write(`${line}\n`);
         }
       });
 
-      // Capture stderr
       let stderr = "";
       child.stderr?.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
@@ -107,7 +102,6 @@ export class ClaudeEngine implements Engine {
       child.on("close", (code) => {
         rl.close();
 
-        // If we got a result event, use its status regardless of exit code
         if (resultEvent) {
           resolve({
             success: !resultEvent.is_error,
@@ -118,7 +112,6 @@ export class ClaudeEngine implements Engine {
           return;
         }
 
-        // No result event — check for rate limiting in stderr/output
         const combined = output + stderr;
         const rateLimited =
           combined.includes("rate limit") ||

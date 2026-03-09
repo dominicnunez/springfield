@@ -1,6 +1,7 @@
-import { DEFAULT_OC_PRIME_MODEL } from "../config/loader.js";
+import { DEFAULT_OC_PRIME_MODEL, type EffortLevel } from "../config/loader.js";
 import { logWarning } from "../ui/logger.js";
 import type { Engine, EngineResult } from "./base.js";
+import { getEngineEffortConfig } from "./effort.js";
 import { commandExists, spawnLineProcess } from "./process.js";
 
 interface OpenCodeEvent {
@@ -31,12 +32,18 @@ export class OpenCodeEngine implements Engine {
 
   private primaryModel: string;
   private fallbackModel: string | undefined;
+  private effort: EffortLevel;
   private usingFallback = false;
 
-  constructor(model: string = DEFAULT_OC_PRIME_MODEL, fallbackModel?: string) {
+  constructor(
+    model: string = DEFAULT_OC_PRIME_MODEL,
+    fallbackModel?: string,
+    effort: EffortLevel = "high",
+  ) {
     this.primaryModel = model;
     this.model = model;
     this.fallbackModel = fallbackModel;
+    this.effort = effort;
   }
 
   isAvailable(): boolean {
@@ -44,7 +51,12 @@ export class OpenCodeEngine implements Engine {
   }
 
   async run(prompt: string): Promise<EngineResult> {
-    const args = ["run", "--format", "json", "--model", this.model, prompt];
+    const effortConfig = getEngineEffortConfig("opencode", this.effort);
+    const args = ["run", "--format", "json", "--model", this.model];
+    if (effortConfig.args) {
+      args.push(...effortConfig.args);
+    }
+    args.push(prompt);
 
     return new Promise<EngineResult>((resolve) => {
       const processResult = spawnLineProcess("opencode", args, [
@@ -64,7 +76,6 @@ export class OpenCodeEngine implements Engine {
       }
 
       const { child, rl, killChild, installSafetyTimeout } = processResult;
-
       let output = "";
       let stderr = "";
       let completed = false;

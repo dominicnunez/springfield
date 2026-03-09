@@ -110,6 +110,38 @@ describe("CodexEngine", () => {
           "--skip-git-repo-check",
           "--model",
           "gpt-5",
+          "-c",
+          "model_reasoning_effort=high",
+          "test prompt",
+        ],
+        expect.objectContaining({ stdio: ["ignore", "pipe", "pipe"] }),
+      );
+    });
+
+    test("passes xhigh effort override to codex", async () => {
+      const child = createMockChild([
+        eventLine({
+          type: "item.completed",
+          item: { type: "agent_message", text: "done" },
+        }),
+      ]);
+      spawnSpy = spyOn(childProcess, "spawn").mockReturnValue(
+        child as unknown as ReturnType<typeof childProcess.spawn>,
+      );
+
+      await new CodexEngine("gpt-5", "xhigh").run("test prompt");
+
+      expect(spawnSpy).toHaveBeenCalledWith(
+        "codex",
+        [
+          "exec",
+          "--json",
+          "--dangerously-bypass-approvals-and-sandbox",
+          "--skip-git-repo-check",
+          "--model",
+          "gpt-5",
+          "-c",
+          "model_reasoning_effort=xhigh",
           "test prompt",
         ],
         expect.objectContaining({ stdio: ["ignore", "pipe", "pipe"] }),

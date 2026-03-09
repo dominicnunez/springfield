@@ -3,7 +3,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import { basename, join } from "node:path";
 import pc from "picocolors";
 import type { Config } from "../../config/loader.js";
-import { getCurrentModel } from "../../config/loader.js";
+import { getCurrentModel, getRalphEffort } from "../../config/loader.js";
 import {
   COMPLETE_MARKER,
   type Engine,
@@ -38,10 +38,6 @@ import { initializeRalphEngine } from "../engine-factory.js";
 import { runGitStdout } from "../git.js";
 import { notify } from "../notify.js";
 import { resolveRunRateLimitAction } from "../run-rate-limit.js";
-
-// ─────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────
 
 function sleep(seconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
@@ -91,10 +87,6 @@ function pushAfterCommit(headBefore: string): void {
 function getHeadSha(): string | null {
   return runGitStdout(["rev-parse", "HEAD"]);
 }
-
-// ─────────────────────────────────────────────────────────────
-// Run loop
-// ─────────────────────────────────────────────────────────────
 
 export interface RunOptions {
   prdPath: string;
@@ -173,6 +165,7 @@ function logRunStartup(
 
   console.log(`Starting Ralph (${config.engine}) - ${modeLabel}`);
   console.log(`Using model: ${session.model}`);
+  console.log(`Effort: ${getRalphEffort(config)}`);
 
   if (config.engine === "opencode" && config.ocFallModel) {
     console.log(`Fallback model: ${config.ocFallModel}`);
@@ -365,7 +358,6 @@ export async function runLoop(
     progressFile,
   });
 
-  // Signal handling
   let interrupted = false;
   const signalHandler = (signal: string) => {
     logWarning(`Received signal: ${signal}`);
@@ -392,7 +384,6 @@ export async function runLoop(
 
     iteration++;
 
-    // Check PRD exists
     if (!existsSync(options.prdPath)) {
       logWarning(`${options.prdPath} not found, exiting`);
       console.log(pc.yellow(`  ${options.prdPath} not found. Exiting.`));
@@ -418,7 +409,6 @@ export async function runLoop(
       process.exit(0);
     }
 
-    // Save HEAD before iteration for push detection
     const headBefore = getHeadSha();
 
     logIteration(iteration, config.maxIterations, taskName, engine.model);
@@ -439,7 +429,6 @@ export async function runLoop(
     logAiOutput(result.output);
     console.log("");
 
-    // Rate limit handling (OpenCode only)
     if (config.engine === "opencode") {
       const rateLimitResolution = await handleRunRateLimit(
         engine,
@@ -467,7 +456,6 @@ export async function runLoop(
       process.exit(result.exitCode);
     }
 
-    // Test verification gate
     if (!config.skipTestVerify && testCmd) {
       const verification = verify(testCmd);
       const decision = handleVerificationResult(
@@ -492,12 +480,10 @@ export async function runLoop(
       }
     }
 
-    // Push after commit
     if (config.pushAfterCommit && !config.skipCommit && headBefore) {
       pushAfterCommit(headBefore);
     }
 
-    // Completion check
     if (result.output.includes(COMPLETE_MARKER)) {
       const finalTasks = parsePrd(options.prdPath);
       const remainingCount = countIncompleteTasks(finalTasks);
@@ -515,7 +501,6 @@ export async function runLoop(
         continue;
       }
 
-      // Final test run
       if (!config.skipTestVerify && testCmd) {
         console.log("");
         console.log("  Final verification: running full test suite...");
@@ -533,7 +518,6 @@ export async function runLoop(
         }
       }
 
-      // Success!
       logSuccess("All tasks completed successfully!");
       console.log(pc.green("==========================================="));
       console.log(
@@ -552,11 +536,9 @@ export async function runLoop(
         `Ralph finished ${projectName} — all tasks complete after ${iteration} iterations. All tests passing.`,
       );
 
-      // Chain to willie audit if configured
       if (config.auditAfterComplete) {
         console.log("");
         console.log(pc.cyan("  Starting willie audit loop..."));
-        // Dynamic import to avoid circular dependency at module load
         const { auditLoop } = await import("./audit.js");
         await auditLoop(config, {
           startStep: "audit",
@@ -573,7 +555,6 @@ export async function runLoop(
     await sleep(config.sleepSeconds);
   }
 
-  // Max iterations reached
   logWarning(`Reached max iterations (${config.maxIterations})`);
   console.log(pc.yellow("==========================================="));
   console.log(pc.yellow(`  Reached max iterations (${config.maxIterations})`));
@@ -586,10 +567,6 @@ export async function runLoop(
 
   process.exit(1);
 }
-
-// ─────────────────────────────────────────────────────────────
-// Single task mode
-// ─────────────────────────────────────────────────────────────
 
 export async function runSingleTask(
   config: Config,
@@ -612,7 +589,6 @@ export async function runSingleTask(
   logAiOutput(result.output);
   console.log("");
 
-  // Rate limit handling (OpenCode only)
   if (
     config.engine === "opencode" &&
     (result.hardRateLimited || result.softRateLimited)
@@ -647,7 +623,6 @@ export async function runSingleTask(
     process.exit(result.exitCode);
   }
 
-  // Test verification gate
   if (!config.skipTestVerify && testCmd) {
     const verification = verify(testCmd);
     const decision = handleVerificationResult(

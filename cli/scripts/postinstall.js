@@ -20,7 +20,8 @@ type = opencode
 
 [models]
 claude = sonnet
-claude-effort = high
+claude-effort = high        # global effort default: low|medium|high|xhigh
+# Claude supports only low|medium|high and errors on xhigh
 opencode-primary = opencode/glm-5-free
 # opencode-fallback =
 
@@ -37,12 +38,12 @@ skip-test-verify = false
 max-consecutive-failures = 3
 # test-cmd =
 # model = sonnet
-# effort = high
+# effort = high             # overrides the global effort for Ralph
 
 [willie]
 max-iterations = 0
 # audit-prompt = audit-prompt.md
-# effort = high
+# effort = high             # overrides the global effort for Willie
 
 [logging]
 # log-dir = ~/.sfk/logs

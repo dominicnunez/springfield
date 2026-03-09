@@ -1,5 +1,7 @@
+import type { EffortLevel } from "../config/loader.js";
 import { logWarning } from "../ui/logger.js";
 import type { Engine, EngineResult } from "./base.js";
+import { getEngineEffortConfig } from "./effort.js";
 import { commandExists, spawnLineProcess } from "./process.js";
 
 interface CodexItem {
@@ -20,10 +22,12 @@ export class CodexEngine implements Engine {
   name = "codex";
   model: string;
   private selectedModel: string | undefined;
+  private effort: EffortLevel;
 
-  constructor(model?: string) {
+  constructor(model?: string, effort: EffortLevel = "high") {
     this.selectedModel = model?.trim() ? model : undefined;
     this.model = this.selectedModel ?? "default";
+    this.effort = effort;
   }
 
   isAvailable(): boolean {
@@ -31,6 +35,7 @@ export class CodexEngine implements Engine {
   }
 
   async run(prompt: string): Promise<EngineResult> {
+    const effortConfig = getEngineEffortConfig("codex", this.effort);
     const args = [
       "exec",
       "--json",
@@ -40,6 +45,9 @@ export class CodexEngine implements Engine {
 
     if (this.selectedModel) {
       args.push("--model", this.selectedModel);
+    }
+    if (effortConfig.args) {
+      args.push(...effortConfig.args);
     }
     args.push(prompt);
 
@@ -60,7 +68,6 @@ export class CodexEngine implements Engine {
       }
 
       const { child, rl, installSafetyTimeout } = processResult;
-
       const outputLines: string[] = [];
       let stderr = "";
       let sawErrorEvent = false;

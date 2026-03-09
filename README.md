@@ -87,7 +87,7 @@ type = opencode
 
 [models]
 claude = sonnet
-claude-effort = high
+claude-effort = high        # global effort default: low|medium|high|xhigh
 # codex = gpt-5-codex
 opencode-primary = big-pickle
 
@@ -130,11 +130,11 @@ opencode-primary = opencode/glm-5-free  # global default
 
 [ralph]
 # inherits opencode/glm-5-free by default
-effort = high
+effort = high               # use xhigh for codex/opencode if desired
 
 [willie]
 # inherits opencode/glm-5-free by default
-effort = high
+effort = high               # Claude rejects xhigh
 ```
 
 Or override the model for a specific agent:
@@ -147,6 +147,17 @@ model = opus              # willie uses opus instead
 ### Available Settings
 
 See `config.example` for all available settings with documentation.
+
+Effort levels are configured once and translated per engine at runtime:
+- Claude uses `CLAUDE_CODE_EFFORT_LEVEL`
+- Codex uses `model_reasoning_effort`
+- OpenCode uses `--variant`
+
+Supported levels:
+- Claude: `low`, `medium`, `high`
+- Codex/OpenCode: `low`, `medium`, `high`, `xhigh`
+
+If you choose an unsupported level for the selected engine, `sfk` exits with an error.
 
 ### Test Auto-Detection
 

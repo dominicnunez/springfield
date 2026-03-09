@@ -133,14 +133,14 @@ skip-test-verify = false
 max-consecutive-failures = 5
 test-cmd = bun test
 model = haiku
-effort = low
+effort = xhigh
 audit-after-complete = true
 
 [willie]
 max-iterations = 3
 audit-prompt = audit/prompt.md
 model = opus
-effort = high
+effort = xhigh
 
 [logging]
 log-dir = /tmp/logs
@@ -163,12 +163,12 @@ progress-dir = /tmp/progress
       expect(result["ralph.max-consecutive-failures"]).toBe("5");
       expect(result["ralph.test-cmd"]).toBe("bun test");
       expect(result["ralph.model"]).toBe("haiku");
-      expect(result["ralph.effort"]).toBe("low");
+      expect(result["ralph.effort"]).toBe("xhigh");
       expect(result["ralph.audit-after-complete"]).toBe("true");
       expect(result["willie.max-iterations"]).toBe("3");
       expect(result["willie.audit-prompt"]).toBe("audit/prompt.md");
       expect(result["willie.model"]).toBe("opus");
-      expect(result["willie.effort"]).toBe("high");
+      expect(result["willie.effort"]).toBe("xhigh");
       expect(result["logging.log-dir"]).toBe("/tmp/logs");
       expect(result["logging.progress-dir"]).toBe("/tmp/progress");
     });
@@ -209,6 +209,12 @@ progress-dir = /tmp/progress
       expect(config.claudeEffort).toBe("high"); // unchanged
     });
 
+    test("accepts xhigh effort level", () => {
+      const config = baseConfig();
+      applyConfigToConfig(config, { "models.claude-effort": "xhigh" });
+      expect(config.claudeEffort).toBe("xhigh");
+    });
+
     test("applies rate limit settings", () => {
       const config = baseConfig();
       applyConfigToConfig(config, {
@@ -230,7 +236,7 @@ progress-dir = /tmp/progress
         "ralph.max-consecutive-failures": "5",
         "ralph.test-cmd": "bun test",
         "ralph.model": "haiku",
-        "ralph.effort": "low",
+        "ralph.effort": "xhigh",
         "ralph.audit-after-complete": "true",
       });
       expect(config.maxIterations).toBe(25);
@@ -241,7 +247,7 @@ progress-dir = /tmp/progress
       expect(config.maxConsecutiveFailures).toBe(5);
       expect(config.testCmd).toBe("bun test");
       expect(config.ralphModel).toBe("haiku");
-      expect(config.ralphEffort).toBe("low");
+      expect(config.ralphEffort).toBe("xhigh");
       expect(config.auditAfterComplete).toBe(true);
     });
 
@@ -251,12 +257,12 @@ progress-dir = /tmp/progress
         "willie.max-iterations": "3",
         "willie.audit-prompt": "audit/prompt.md",
         "willie.model": "opus",
-        "willie.effort": "medium",
+        "willie.effort": "xhigh",
       });
       expect(config.willieMaxIterations).toBe(3);
       expect(config.willieAuditPrompt).toBe("audit/prompt.md");
       expect(config.willieModel).toBe("opus");
-      expect(config.willieEffort).toBe("medium");
+      expect(config.willieEffort).toBe("xhigh");
     });
 
     test("applies logging settings", () => {

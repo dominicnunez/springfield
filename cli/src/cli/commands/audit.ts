@@ -29,10 +29,6 @@ import { switchToFallbackWithNotice } from "../engine-fallback.js";
 import { notify } from "../notify.js";
 import { type ExceptionEntry, parseExceptionFile } from "./prune.js";
 
-// ─────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────
-
 export type AuditStep = "audit" | "validate" | "fix";
 
 const STEP_ORDER: AuditStep[] = ["audit", "validate", "fix"];
@@ -61,19 +57,11 @@ type PipelineSignal = "continue" | "stop" | "retry" | "abort";
 
 export interface AuditOptions {
   startStep: AuditStep;
-  maxIterations: number; // 0 = unlimited
+  maxIterations: number;
   auditPromptPath: string | undefined;
   lintCmd: string | undefined;
   verbose?: boolean;
 }
-
-// ─────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────
 
 function countFindings(reportPath: string): number {
   if (!existsSync(reportPath)) return 0;
@@ -288,10 +276,6 @@ function logToFile(
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// Steps
-// ─────────────────────────────────────────────────────────────
-
 type AuditStepResult = "continue" | "stop" | "rate-limited";
 type StepResult = "ok" | "rate-limited";
 
@@ -439,10 +423,6 @@ async function runFixStep(
   return "ok";
 }
 
-// ─────────────────────────────────────────────────────────────
-// Pipeline
-// ─────────────────────────────────────────────────────────────
-
 type RateLimitResult<T> =
   | { signal: "ok"; result: T }
   | { signal: "retry" | "abort" };
@@ -535,10 +515,6 @@ async function runPipeline(
 
   return "continue";
 }
-
-// ─────────────────────────────────────────────────────────────
-// Main audit loop
-// ─────────────────────────────────────────────────────────────
 
 export async function auditLoop(
   config: Config,

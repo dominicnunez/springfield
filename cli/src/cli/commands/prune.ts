@@ -7,10 +7,6 @@ import { logDebug, logError, logInfo, logSuccess } from "../../ui/logger.js";
 import { AUDIT_EXCEPTIONS_DIR } from "../audit-paths.js";
 import { initializeWillieEngine } from "../engine-factory.js";
 
-// ─────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────
-
 export interface ExceptionEntry {
   heading: string;
   location?: string;
@@ -23,15 +19,7 @@ export interface ExceptionFile {
   entries: ExceptionEntry[];
 }
 
-// ─────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────
-
 const CONTEXT_LINES = 20;
-
-// ─────────────────────────────────────────────────────────────
-// Parsing
-// ─────────────────────────────────────────────────────────────
 
 export function parseExceptionFile(
   filePath: string,
@@ -45,25 +33,20 @@ export function parseExceptionFile(
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].startsWith("### ")) {
       if (currentStart === -1) {
-        // First entry — everything before is the header
         headerEnd = i;
       } else {
-        // Flush previous entry
         entries.push(buildEntry(lines, currentStart, i));
       }
       currentStart = i;
     }
   }
 
-  // Flush last entry
   if (currentStart !== -1) {
     entries.push(buildEntry(lines, currentStart, lines.length));
   }
 
   const header =
-    headerEnd === -1
-      ? content // No entries — entire content is header
-      : lines.slice(0, headerEnd).join("\n");
+    headerEnd === -1 ? content : lines.slice(0, headerEnd).join("\n");
 
   return { path: filePath, header, entries };
 }
@@ -74,14 +57,12 @@ function buildEntry(
   end: number,
 ): ExceptionEntry {
   const rawText = lines.slice(start, end).join("\n").replace(/\n+$/, "");
-  const heading = lines[start].slice(4); // strip "### "
+  const heading = lines[start].slice(4);
 
-  // Extract location from **Location:** `path` pattern
   let location: string | undefined;
   for (let i = start + 1; i < end; i++) {
     const match = lines[i].match(/^\*\*Location:\*\*\s*`([^`]+)`/);
     if (match) {
-      // Take just the file path, strip line number and trailing context
       location = match[1].split(":")[0];
       break;
     }
@@ -89,10 +70,6 @@ function buildEntry(
 
   return { heading, location, rawText };
 }
-
-// ─────────────────────────────────────────────────────────────
-// Phase 1 — deterministic file-existence check
-// ─────────────────────────────────────────────────────────────
 
 interface PruneResult {
   entry: ExceptionEntry;
@@ -120,10 +97,6 @@ function checkFileExistence(entries: ExceptionEntry[]): {
   return { stale, surviving };
 }
 
-// ─────────────────────────────────────────────────────────────
-// Phase 2 — AI review
-// ─────────────────────────────────────────────────────────────
-
 function buildCodeContext(entries: ExceptionEntry[]): string {
   const parts: string[] = [];
 
@@ -133,8 +106,6 @@ function buildCodeContext(entries: ExceptionEntry[]): string {
     try {
       const content = readFileSync(entry.location, "utf-8");
       const lines = content.split("\n");
-
-      // Try to extract line number from the raw entry
       const lineMatch = entry.rawText.match(
         /\*\*Location:\*\*\s*`[^`]+:(\d+)`/,
       );
@@ -145,9 +116,7 @@ function buildCodeContext(entries: ExceptionEntry[]): string {
       const snippet = lines.slice(start, end).join("\n");
 
       parts.push(`--- ${entry.location}:${start + 1}-${end} ---\n${snippet}\n`);
-    } catch {
-      // File unreadable, skip context
-    }
+    } catch {}
   }
 
   return parts.join("\n");
@@ -201,7 +170,6 @@ async function aiReview(
     return [];
   }
 
-  // Parse JSON array from output
   const jsonMatch = result.output.match(/\[[\d\s,]*\]/);
   if (!jsonMatch) {
     logDebug(`No valid JSON array in AI response for ${file.path}`);
@@ -228,10 +196,6 @@ async function aiReview(
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// File rewriting
-// ─────────────────────────────────────────────────────────────
-
 export function rebuildFile(
   file: ExceptionFile,
   entriesToRemove: Set<string>,
@@ -244,10 +208,6 @@ export function rebuildFile(
 
   return `${file.header}\n${surviving.map((e) => e.rawText).join("\n\n")}\n`;
 }
-
-// ─────────────────────────────────────────────────────────────
-// Main
-// ─────────────────────────────────────────────────────────────
 
 export async function pruneExceptions(
   config: Config,
@@ -270,7 +230,6 @@ export async function pruneExceptions(
     return;
   }
 
-  // Parse all files
   const files: ExceptionFile[] = mdFiles.map((f) => {
     const filePath = join(AUDIT_EXCEPTIONS_DIR, f);
     const content = readFileSync(filePath, "utf-8");
@@ -289,10 +248,8 @@ export async function pruneExceptions(
   console.log(`  Entries: ${totalEntries}`);
   console.log("");
 
-  // Phase 1: deterministic check
   logInfo("Phase 1: checking for deleted files...");
   const allStale: PruneResult[] = [];
-
   const phase1Survivors = new Map<string, ExceptionEntry[]>();
 
   for (const file of files) {
@@ -307,7 +264,6 @@ export async function pruneExceptions(
     logInfo("  No entries reference deleted files.");
   }
 
-  // Phase 2: AI review
   const engine = initializeWillieEngine(
     config,
     (engineName, cliName) =>
@@ -328,7 +284,6 @@ export async function pruneExceptions(
     allStale.push(...aiStale);
   }
 
-  // Apply removals
   if (allStale.length === 0) {
     logSuccess("No stale entries found.");
     return;

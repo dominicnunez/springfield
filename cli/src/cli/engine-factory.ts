@@ -8,6 +8,7 @@ import {
 import type { Engine } from "../engines/base.js";
 import { ClaudeEngine } from "../engines/claude.js";
 import { CodexEngine } from "../engines/codex.js";
+import { InvalidEffortLevelError, assertEffortSupported } from "../engines/effort.js";
 import { OpenCodeEngine } from "../engines/opencode.js";
 import { logError } from "../ui/logger.js";
 
@@ -22,29 +23,34 @@ export function getEngineInstallName(engineName: string): string {
 }
 
 export function createRalphEngine(config: Config): Engine {
+  const effort = getRalphEffort(config);
+  assertEffortSupported(config.engine, effort);
+
   if (config.engine === "claude") {
-    return new ClaudeEngine(getCurrentModel(config), getRalphEffort(config));
+    return new ClaudeEngine(getCurrentModel(config), effort);
   }
 
   if (config.engine === "codex") {
-    return new CodexEngine(config.codexModel);
+    return new CodexEngine(config.codexModel, effort);
   }
 
-  return new OpenCodeEngine(config.ocPrimeModel, config.ocFallModel);
+  return new OpenCodeEngine(config.ocPrimeModel, config.ocFallModel, effort);
 }
 
 export function createWillieEngine(config: Config): Engine {
   const model = getWillieModel(config);
+  const effort = getWillieEffort(config);
+  assertEffortSupported(config.engine, effort);
 
   if (config.engine === "opencode") {
-    return new OpenCodeEngine(model, config.ocFallModel);
+    return new OpenCodeEngine(model, config.ocFallModel, effort);
   }
 
   if (config.engine === "codex") {
-    return new CodexEngine(model === "default" ? undefined : model);
+    return new CodexEngine(model === "default" ? undefined : model, effort);
   }
 
-  return new ClaudeEngine(model, getWillieEffort(config));
+  return new ClaudeEngine(model, effort);
 }
 
 export function initializeRalphEngine(
@@ -52,7 +58,16 @@ export function initializeRalphEngine(
   buildUnavailableMessage: (engineName: string, cliName: string) => string,
   engineOverride?: Engine,
 ): Engine | null {
-  const engine = engineOverride ?? createRalphEngine(config);
+  let engine: Engine;
+  try {
+    engine = engineOverride ?? createRalphEngine(config);
+  } catch (error) {
+    if (error instanceof InvalidEffortLevelError) {
+      logError(error.message);
+      return null;
+    }
+    throw error;
+  }
 
   if (!engine.isAvailable()) {
     const cliName = getEngineInstallName(engine.name);
@@ -68,7 +83,16 @@ export function initializeWillieEngine(
   buildUnavailableMessage: (engineName: string, cliName: string) => string,
   engineOverride?: Engine,
 ): Engine | null {
-  const engine = engineOverride ?? createWillieEngine(config);
+  let engine: Engine;
+  try {
+    engine = engineOverride ?? createWillieEngine(config);
+  } catch (error) {
+    if (error instanceof InvalidEffortLevelError) {
+      logError(error.message);
+      return null;
+    }
+    throw error;
+  }
 
   if (!engine.isAvailable()) {
     const cliName = getEngineInstallName(engine.name);
