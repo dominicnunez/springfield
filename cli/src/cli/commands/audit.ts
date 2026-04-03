@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
   existsSync,
@@ -26,6 +27,7 @@ import {
 import { AUDIT_EXCEPTIONS_DIR, AUDIT_REPORT_FILE } from "../audit-paths.js";
 import { initializeAuditSession } from "../audit-session.js";
 import { switchToFallbackWithNotice } from "../engine-fallback.js";
+import { runGitLines } from "../git.js";
 import { notify } from "../notify.js";
 import { type ExceptionEntry, parseExceptionFile } from "./prune.js";
 
@@ -61,6 +63,80 @@ export interface AuditOptions {
   auditPromptPath: string | undefined;
   lintCmd: string | undefined;
   verbose?: boolean;
+}
+
+const EXCEPTION_PATHSPEC = "audit/exceptions";
+
+export function parseChangedExceptionFiles(statusLines: string[]): string[] {
+  const files = new Set<string>();
+
+  for (const line of statusLines) {
+    if (!line || line.length < 4) continue;
+
+    const file = line.slice(3).trim();
+    if (file.includes(" -> ")) continue;
+    if (!file.startsWith(`${EXCEPTION_PATHSPEC}/`) || !file.endsWith(".md")) {
+      continue;
+    }
+
+    files.add(file);
+  }
+
+  return [...files].sort();
+}
+
+function runGit(args: string[]): { ok: boolean; stderr: string } {
+  const result = spawnSync("git", args, {
+    encoding: "utf-8",
+    cwd: process.cwd(),
+  });
+
+  return {
+    ok: !result.error && result.status === 0,
+    stderr: result.stderr?.trim() ?? result.error?.message ?? "",
+  };
+}
+
+function commitExceptionFilesIfChanged(): void {
+  const statusLines = runGitLines(
+    ["status", "--porcelain", "--", EXCEPTION_PATHSPEC],
+    "git status (exceptions)",
+  );
+  const changedFiles = parseChangedExceptionFiles(statusLines);
+
+  if (changedFiles.length === 0) return;
+
+  const addResult = runGit(["add", "--", ...changedFiles]);
+  if (!addResult.ok) {
+    logWarning(
+      `Failed to stage exception updates: ${addResult.stderr || "unknown error"}`,
+    );
+    return;
+  }
+
+  const stagedLines = runGitLines(
+    ["diff", "--cached", "--name-only", "--", EXCEPTION_PATHSPEC],
+    "git diff --cached (exceptions)",
+  );
+  const stagedFiles = stagedLines.filter((f) => f.endsWith(".md"));
+  if (stagedFiles.length === 0) return;
+
+  const commitResult = runGit([
+    "commit",
+    "-m",
+    "docs(audit): update exception records",
+    "--",
+    ...stagedFiles,
+  ]);
+
+  if (commitResult.ok) {
+    logInfo(`Committed ${stagedFiles.length} exception file(s).`);
+    return;
+  }
+
+  logWarning(
+    `Failed to commit exception updates: ${commitResult.stderr || "unknown error"}`,
+  );
 }
 
 function countFindings(reportPath: string): number {
@@ -590,6 +666,9 @@ export async function auditLoop(
       iter--;
       continue;
     }
+
+    commitExceptionFilesIfChanged();
+
     if (signal === "stop") {
       notify(
         `Willie: codebase clean after ${iter} iteration(s) on ${projectName}. No findings.`,

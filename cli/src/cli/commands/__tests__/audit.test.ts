@@ -14,6 +14,7 @@ import {
   buildAuditPromptWithExceptions,
   findMatchingException,
   parseAuditReport,
+  parseChangedExceptionFiles,
 } from "../audit.js";
 
 describe("audit step prompt building", () => {
@@ -205,5 +206,22 @@ describe("audit step prompt building", () => {
 
     expect(result.remainingCount).toBe(0);
     expect(existsSync(join(projectDir, "audit", "report.md"))).toBe(false);
+  });
+
+  test("parseChangedExceptionFiles returns only changed exception markdown files", () => {
+    const files = parseChangedExceptionFiles([
+      " M audit/exceptions/misreads.md",
+      "A  audit/exceptions/design.md",
+      "?? audit/exceptions/risks.md",
+      " M audit/report.md",
+      " M src/index.ts",
+      "R  audit/exceptions/old.md -> audit/exceptions/new.md",
+    ]);
+
+    expect(files).toEqual([
+      "audit/exceptions/design.md",
+      "audit/exceptions/misreads.md",
+      "audit/exceptions/risks.md",
+    ]);
   });
 });
