@@ -1,46 +1,42 @@
 # SFK Configuration
 #
-# Config locations (in priority order):
-#   1. CLI arguments
-#   2. Environment variables
-#   3. .sfk/config (project config)
-#   4. ~/.config/sfk/config (global config)
+# Config location:
+#   ~/.sfk/config
 #
 # To use:
-#   - For project config: mkdir -p .sfk && cp config.example .sfk/config
-#   - For global config: cp config.example ~/.config/sfk/config
+#   mkdir -p ~/.sfk && cp config.example ~/.sfk/config
+#   Then uncomment and set every required value.
 
 [engine]
-type = opencode
+# type = opencode
 
 [models]
-claude = sonnet
-effort = high               # global effort default: low|medium|high|xhigh
-# Claude supports only low|medium|high and errors on xhigh
-# codex =
-opencode-primary = big-pickle
+# claude = sonnet
+# codex = gpt-5-codex
+# opencode-primary = big-pickle
 # opencode-fallback =
+# effort = high               # low|medium|high|xhigh
+# Claude supports only low|medium|high and errors on xhigh
 
 [rate-limits]
-soft-retries = 3
-soft-wait = 30
+# soft-retries = 3
+# soft-wait = 30
 
 [ralph]
-max-iterations = 10
-sleep-seconds = 2
-skip-commit = false
-push-after-commit = false
-skip-test-verify = false
-max-consecutive-failures = 3
+# max-iterations = 10
+# sleep-seconds = 2
+# skip-commit = false
+# push-after-commit = false
+# skip-test-verify = false
+# max-consecutive-failures = 3
+# audit-after-complete = false
 # test-cmd =
 # model = sonnet
-# effort = high             # overrides the global effort for Ralph
+# effort = high               # overrides the global effort for Ralph
 
 [willie]
-max-iterations = 0
-# audit-prompt = audit/prompt.md  # uses built-in default if omitted
-# effort = high             # overrides the global effort for Willie
-
-[logging]
-# log-dir = ~/.sfk/logs
-# progress-dir = ~/.sfk/progress
+# max-iterations = 0
+# audit-prompt = audit/prompt.md
+# lint-cmd =
+# model = opus
+# effort = high               # overrides the global effort for Willie

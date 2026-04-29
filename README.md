@@ -8,7 +8,7 @@ Autonomous AI development kit.
 npm install -g sfk
 
 # Then use anywhere
-sfk                        # Uses PRD.md with OpenCode (default)
+sfk                        # Uses PRD.md with your configured engine
 sfk --claude               # Use Claude Code
 sfk --codex                # Use Codex CLI
 sfk --model sonnet         # Override model
@@ -28,7 +28,14 @@ Ralph runs an AI coding assistant in a loop, feeding it tasks from a PRD (Produc
 
 ## Quick Start
 
-1. Create a `PRD.md` in your project with tasks:
+1. Configure SFK:
+   ```bash
+   mkdir -p ~/.sfk
+   cp config.example ~/.sfk/config
+   $EDITOR ~/.sfk/config
+   ```
+
+2. Create a `PRD.md` in your project with tasks:
    ```markdown
    ## Tasks
    - [ ] Implement user authentication
@@ -36,7 +43,7 @@ Ralph runs an AI coding assistant in a loop, feeding it tasks from a PRD (Produc
    - [ ] Set up API endpoints
    ```
 
-2. Run Ralph:
+3. Run Ralph:
    ```bash
    sfk
    ```
@@ -46,7 +53,7 @@ Ralph will work through each task, running tests and committing progress automat
 ## CLI Usage
 
 ```bash
-sfk                        # Uses PRD.md, OpenCode engine (default)
+sfk                        # Uses PRD.md and your ~/.sfk/config settings
 sfk --opencode             # Explicit OpenCode
 sfk --claude               # Use Claude Code
 sfk --codex                # Use Codex CLI
@@ -61,25 +68,52 @@ sfk --help                 # Show all options
 
 ## Configuration
 
-SFK uses a two-level INI config system:
+SFK uses a single INI config file under your home directory:
 
 | Location | Purpose |
 |----------|---------|
-| `~/.config/sfk/config` | Global defaults (created on install) |
-| `.sfk/config` | Project-specific overrides |
+| `~/.sfk/config` | Required SFK configuration, created as a commented example on install |
 
 ### Config Priority
 
 ```
 1. CLI arguments          (--model, --engine, etc.)
-2. Environment variables  (OC_PRIME_MODEL, etc.)
-3. Project config         (.sfk/config)
-4. Global config          (~/.config/sfk/config)
+2. Global config          (~/.sfk/config)
 ```
 
 ### Global Config
 
-Created automatically on `npm install -g sfk` with sensible defaults:
+Created automatically on `npm install -g sfk` as a commented example. SFK exits with a friendly setup message until you uncomment and set the required values. Excerpt:
+
+```ini
+[engine]
+# type = opencode
+
+[models]
+# claude = sonnet
+# codex = gpt-5-codex
+# opencode-primary = big-pickle
+# effort = high               # low|medium|high|xhigh
+
+[ralph]
+# max-iterations = 10
+# sleep-seconds = 2
+# skip-commit = false
+
+[willie]
+# max-iterations = 0
+```
+
+### Required Setup
+
+Edit `~/.sfk/config` and uncomment the values you want to use:
+
+```bash
+mkdir -p ~/.sfk
+$EDITOR ~/.sfk/config
+```
+
+Minimal OpenCode example:
 
 ```ini
 [engine]
@@ -87,53 +121,44 @@ type = opencode
 
 [models]
 claude = sonnet
-effort = high               # global effort default: low|medium|high|xhigh
-# codex = gpt-5-codex
+codex = gpt-5-codex
 opencode-primary = big-pickle
+effort = high
+
+[rate-limits]
+soft-retries = 3
+soft-wait = 30
 
 [ralph]
 max-iterations = 10
 sleep-seconds = 2
 skip-commit = false
+push-after-commit = false
+skip-test-verify = false
+max-consecutive-failures = 3
+audit-after-complete = false
 
 [willie]
 max-iterations = 0
 ```
 
-### Project Config
-
-Create `.sfk/config` to override settings for a specific project:
-
-```bash
-mkdir -p .sfk
-cat > .sfk/config << 'EOF'
-[engine]
-type = claude
-
-[ralph]
-model = opus
-effort = high
-test-cmd = npm run test:ci
-EOF
-```
-
 ### Per-Agent Model/Effort
 
-Each agent inherits the engine's primary model by default. Override per-agent if needed:
+Each agent inherits the configured engine model unless you set a per-agent override:
 
 ```ini
 [engine]
 type = opencode
 
 [models]
-opencode-primary = opencode/glm-5-free  # global default
+opencode-primary = opencode/glm-5-free
 
 [ralph]
-# inherits opencode/glm-5-free by default
+# inherits opencode/glm-5-free
 effort = high               # use xhigh for codex/opencode if desired
 
 [willie]
-# inherits opencode/glm-5-free by default
+# inherits opencode/glm-5-free
 effort = high               # Claude rejects xhigh
 ```
 
@@ -172,7 +197,7 @@ Ralph automatically detects your test command based on project files:
 | `go.mod` | `go test ./...` |
 | `Cargo.toml` | `cargo test` |
 
-If auto-detection fails or you need a custom command, set `test-cmd` under `[ralph]` in your config.
+If auto-detection fails or you need a custom command, set `test-cmd` under `[ralph]` in `~/.sfk/config`.
 
 ## Project Files
 
@@ -214,11 +239,11 @@ This prevents the AI from marking tasks complete without actually writing tests.
 
 ## AI Engines
 
-| Engine | CLI | Default Model |
+| Engine | CLI | Model Setting |
 |--------|-----|---------------|
-| OpenCode | `opencode` | `big-pickle` |
-| Claude | `claude` | `sonnet` |
-| Codex | `codex` | Codex CLI default |
+| OpenCode | `opencode` | `models.opencode-primary` |
+| Claude | `claude` | `models.claude` |
+| Codex | `codex` | `models.codex` |
 
 ### Rate Limit Handling (OpenCode)
 
@@ -283,7 +308,7 @@ Willie resolves the audit prompt in this order:
 
 1. `--audit-prompt <path>` CLI flag
 2. `audit/prompt.md` in the project root
-3. `~/.config/sfk/audit-prompt.md` (global)
+3. `~/.sfk/audit-prompt.md` (global)
 4. Built-in default prompt (security, bugs, performance, code quality)
 
 ### How It Works
@@ -318,7 +343,7 @@ Exception entries identify only the source line because the exception file path 
 
 ## Legacy Config Migration
 
-If you're upgrading from an older version that used `.ralph/ralph.env` or `~/.config/ralph/ralph.env`, SFK will detect the old config, warn you, and fall back to reading it. To migrate, create the new config at `~/.config/sfk/config` using the INI format shown above. See `config.example` for the full reference.
+If you're upgrading from an older version, create the new config at `~/.sfk/config` using the INI format shown above. See `config.example` for the full reference.
 
 ## License
 

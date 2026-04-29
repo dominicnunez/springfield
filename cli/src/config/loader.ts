@@ -6,13 +6,17 @@ import { logWarning } from "../ui/logger.js";
 export type EngineType = "opencode" | "claude" | "codex";
 export type EffortLevel = "high" | "medium" | "low" | "xhigh";
 
-export const DEFAULT_OC_PRIME_MODEL = "big-pickle";
+export const SFK_HOME_DIR = join(homedir(), ".sfk");
+export const SFK_CONFIG_FILE = join(SFK_HOME_DIR, "config");
+export const SFK_LOG_DIR = join(SFK_HOME_DIR, "logs");
+export const SFK_PROGRESS_DIR = join(SFK_HOME_DIR, "progress");
+export const SFK_AUDIT_PROMPT_FILE = join(SFK_HOME_DIR, "audit-prompt.md");
 
 export interface Config {
   // Engine
   engine: EngineType;
 
-  // General defaults
+  // Models
   claudeModel: string;
   claudeEffort: EffortLevel;
   codexModel: string | undefined;
@@ -49,56 +53,51 @@ export interface Config {
   auditAfterComplete: boolean;
 }
 
-// Config file paths
-const GLOBAL_CONFIG_DIR = join(homedir(), ".config", "sfk");
-const GLOBAL_CONFIG_FILE = join(GLOBAL_CONFIG_DIR, "config");
-const PROJECT_CONFIG_DIR = ".sfk";
-const PROJECT_CONFIG_FILE = join(PROJECT_CONFIG_DIR, "config");
-
-// Legacy paths (for migration detection)
-const LEGACY_GLOBAL_DIR = join(homedir(), ".config", "ralph");
-const LEGACY_GLOBAL_FILE = join(LEGACY_GLOBAL_DIR, "ralph.env");
-const LEGACY_PROJECT_FILE = join(".ralph", "ralph.env");
-
-const DEFAULT_CONFIG_CONTENT = `# SFK Configuration
-# Override per-project: .sfk/config
+const EXAMPLE_CONFIG_CONTENT = `# SFK Configuration
+# Location: ~/.sfk/config
+# Uncomment and set every required value before running sfk.
 
 [engine]
-type = opencode
+# type = opencode
 
 [models]
-claude = sonnet
-effort = high               # global effort default: low|medium|high|xhigh
-# Claude supports only low|medium|high and errors on xhigh
-# codex =
-opencode-primary = opencode/glm-5-free
+# claude = sonnet
+# codex = gpt-5-codex
+# opencode-primary = big-pickle
 # opencode-fallback =
+# effort = high               # low|medium|high|xhigh
+# Claude supports only low|medium|high and errors on xhigh
 
 [rate-limits]
-soft-retries = 3
-soft-wait = 30
+# soft-retries = 3
+# soft-wait = 30
 
 [ralph]
-max-iterations = 10
-sleep-seconds = 2
-skip-commit = false
-push-after-commit = false
-skip-test-verify = false
-max-consecutive-failures = 3
+# max-iterations = 10
+# sleep-seconds = 2
+# skip-commit = false
+# push-after-commit = false
+# skip-test-verify = false
+# max-consecutive-failures = 3
+# audit-after-complete = false
 # test-cmd =
 # model = sonnet
-# effort = high             # overrides the global effort for Ralph
+# effort = high               # overrides the global effort for Ralph
 
 [willie]
-max-iterations = 0
+# max-iterations = 0
 # audit-prompt = audit/prompt.md
 # lint-cmd =
-# effort = high             # overrides the global effort for Willie
-
-[logging]
-# log-dir = ~/.sfk/logs
-# progress-dir = ~/.sfk/progress
+# model = opus
+# effort = high               # overrides the global effort for Willie
 `;
+
+export class ConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConfigError";
+  }
+}
 
 /**
  * Parse INI-style config file with [section] headers.
@@ -133,28 +132,6 @@ export function parseConfigFile(content: string): Record<string, string> {
 
     const fullKey = currentSection ? `${currentSection}.${key}` : key;
     result[fullKey] = value;
-  }
-
-  return result;
-}
-
-/**
- * Parse a simple .env file format (legacy support)
- */
-function parseEnvFile(content: string): Record<string, string> {
-  const result: Record<string, string> = {};
-
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    const eqIndex = trimmed.indexOf("=");
-    if (eqIndex === -1) continue;
-
-    const key = trimmed.slice(0, eqIndex).trim();
-    const value = removeQuotes(trimmed.slice(eqIndex + 1).trim());
-
-    result[key] = value;
   }
 
   return result;
@@ -198,9 +175,9 @@ function stripInlineComment(value: string): string {
   return value;
 }
 
-function parseIntSafe(value: string, defaultVal: number): number {
-  const parsed = parseInt(value, 10);
-  return Number.isNaN(parsed) ? defaultVal : parsed;
+function parseInteger(value: string): number | undefined {
+  if (!/^-?\d+$/.test(value.trim())) return undefined;
+  return Number.parseInt(value, 10);
 }
 
 function parseEffort(value: string): EffortLevel | undefined {
@@ -215,13 +192,76 @@ function parseEffort(value: string): EffortLevel | undefined {
   return undefined;
 }
 
+function assignInteger(
+  parsed: Record<string, string>,
+  key: string,
+  assign: (value: number) => void,
+  issues: string[],
+  options: { min?: number } = {},
+): void {
+  const raw = parsed[key];
+  if (raw === undefined) return;
+
+  const value = parseInteger(raw);
+  if (
+    value === undefined ||
+    (options.min !== undefined && value < options.min)
+  ) {
+    issues.push(
+      `${key} must be an integer${options.min !== undefined ? ` >= ${options.min}` : ""}.`,
+    );
+    return;
+  }
+
+  assign(value);
+}
+
+function assignBoolean(
+  parsed: Record<string, string>,
+  key: string,
+  assign: (value: boolean) => void,
+  issues: string[],
+): void {
+  const raw = parsed[key];
+  if (raw === undefined) return;
+
+  const value = parseBool(raw);
+  if (value === undefined) {
+    issues.push(`${key} must be true or false.`);
+    return;
+  }
+
+  assign(value);
+}
+
+function assignEffort(
+  parsed: Record<string, string>,
+  key: string,
+  assign: (value: EffortLevel) => void,
+  issues: string[],
+): void {
+  const raw = parsed[key];
+  if (raw === undefined) return;
+
+  const value = parseEffort(raw);
+  if (!value) {
+    issues.push(`${key} must be one of: low, medium, high, xhigh.`);
+    return;
+  }
+
+  assign(value);
+}
+
 /**
- * Apply parsed INI config values to Config object
+ * Apply parsed INI config values to a config object.
+ * Returns validation issues for provided values that are malformed.
  */
 export function applyConfigToConfig(
-  config: Config,
+  config: Partial<Config>,
   parsed: Record<string, string>,
-): void {
+): string[] {
+  const issues: string[] = [];
+
   // [engine]
   const engineType = parsed["engine.type"];
   if (
@@ -231,354 +271,338 @@ export function applyConfigToConfig(
   ) {
     config.engine = engineType;
   } else if (engineType !== undefined) {
-    logWarning(
-      `Unknown engine type "${engineType}" in config, using default (opencode)`,
-    );
+    issues.push("engine.type must be one of: opencode, claude, codex.");
   }
 
   // [models]
-  if (parsed["models.claude"]) config.claudeModel = parsed["models.claude"];
-  if (parsed["models.effort"]) {
-    const effort = parseEffort(parsed["models.effort"]);
-    if (effort) config.claudeEffort = effort;
-  }
+  if (parsed["models.claude"]?.trim())
+    config.claudeModel = parsed["models.claude"];
+  assignEffort(
+    parsed,
+    "models.effort",
+    (value) => {
+      config.claudeEffort = value;
+    },
+    issues,
+  );
   if (parsed["models.codex"]?.trim())
     config.codexModel = parsed["models.codex"];
-  if (parsed["models.opencode-primary"])
+  if (parsed["models.opencode-primary"]?.trim())
     config.ocPrimeModel = parsed["models.opencode-primary"];
   if (parsed["models.opencode-fallback"]?.trim())
     config.ocFallModel = parsed["models.opencode-fallback"];
 
   // [rate-limits]
-  if (parsed["rate-limits.soft-retries"])
-    config.softLimitRetries = parseIntSafe(
-      parsed["rate-limits.soft-retries"],
-      3,
-    );
-  if (parsed["rate-limits.soft-wait"])
-    config.softLimitWait = parseIntSafe(parsed["rate-limits.soft-wait"], 30);
+  assignInteger(
+    parsed,
+    "rate-limits.soft-retries",
+    (value) => {
+      config.softLimitRetries = value;
+    },
+    issues,
+    { min: 0 },
+  );
+  assignInteger(
+    parsed,
+    "rate-limits.soft-wait",
+    (value) => {
+      config.softLimitWait = value;
+    },
+    issues,
+    { min: 0 },
+  );
 
   // [ralph]
-  if (parsed["ralph.max-iterations"])
-    config.maxIterations = parseIntSafe(parsed["ralph.max-iterations"], 10);
-  if (parsed["ralph.sleep-seconds"])
-    config.sleepSeconds = parseIntSafe(parsed["ralph.sleep-seconds"], 2);
-  const skipCommit = parsed["ralph.skip-commit"];
-  if (skipCommit !== undefined) {
-    const val = parseBool(skipCommit);
-    if (val !== undefined) config.skipCommit = val;
-  }
-  const pushAfterCommit = parsed["ralph.push-after-commit"];
-  if (pushAfterCommit !== undefined) {
-    const val = parseBool(pushAfterCommit);
-    if (val !== undefined) config.pushAfterCommit = val;
-  }
-  const skipTestVerify = parsed["ralph.skip-test-verify"];
-  if (skipTestVerify !== undefined) {
-    const val = parseBool(skipTestVerify);
-    if (val !== undefined) config.skipTestVerify = val;
-  }
-  if (parsed["ralph.max-consecutive-failures"])
-    config.maxConsecutiveFailures = parseIntSafe(
-      parsed["ralph.max-consecutive-failures"],
-      3,
-    );
+  assignInteger(
+    parsed,
+    "ralph.max-iterations",
+    (value) => {
+      config.maxIterations = value;
+    },
+    issues,
+    { min: -1 },
+  );
+  assignInteger(
+    parsed,
+    "ralph.sleep-seconds",
+    (value) => {
+      config.sleepSeconds = value;
+    },
+    issues,
+    { min: 0 },
+  );
+  assignBoolean(
+    parsed,
+    "ralph.skip-commit",
+    (value) => {
+      config.skipCommit = value;
+    },
+    issues,
+  );
+  assignBoolean(
+    parsed,
+    "ralph.push-after-commit",
+    (value) => {
+      config.pushAfterCommit = value;
+    },
+    issues,
+  );
+  assignBoolean(
+    parsed,
+    "ralph.skip-test-verify",
+    (value) => {
+      config.skipTestVerify = value;
+    },
+    issues,
+  );
+  assignInteger(
+    parsed,
+    "ralph.max-consecutive-failures",
+    (value) => {
+      config.maxConsecutiveFailures = value;
+    },
+    issues,
+    { min: 1 },
+  );
   if (parsed["ralph.test-cmd"]?.trim())
     config.testCmd = parsed["ralph.test-cmd"];
-  if (parsed["ralph.model"]) config.ralphModel = parsed["ralph.model"];
-  if (parsed["ralph.effort"]) {
-    const effort = parseEffort(parsed["ralph.effort"]);
-    if (effort) config.ralphEffort = effort;
-  }
-  const auditAfter = parsed["ralph.audit-after-complete"];
-  if (auditAfter !== undefined) {
-    const val = parseBool(auditAfter);
-    if (val !== undefined) config.auditAfterComplete = val;
-  }
+  if (parsed["ralph.model"]?.trim()) config.ralphModel = parsed["ralph.model"];
+  assignEffort(
+    parsed,
+    "ralph.effort",
+    (value) => {
+      config.ralphEffort = value;
+    },
+    issues,
+  );
+  assignBoolean(
+    parsed,
+    "ralph.audit-after-complete",
+    (value) => {
+      config.auditAfterComplete = value;
+    },
+    issues,
+  );
 
   // [willie]
-  if (parsed["willie.max-iterations"])
-    config.willieMaxIterations = parseIntSafe(
-      parsed["willie.max-iterations"],
-      0,
-    );
+  assignInteger(
+    parsed,
+    "willie.max-iterations",
+    (value) => {
+      config.willieMaxIterations = value;
+    },
+    issues,
+    { min: 0 },
+  );
   if (parsed["willie.audit-prompt"]?.trim())
     config.willieAuditPrompt = parsed["willie.audit-prompt"];
   if (parsed["willie.lint-cmd"]?.trim())
     config.lintCmd = parsed["willie.lint-cmd"];
-  if (parsed["willie.model"]) config.willieModel = parsed["willie.model"];
-  if (parsed["willie.effort"]) {
-    const effort = parseEffort(parsed["willie.effort"]);
-    if (effort) config.willieEffort = effort;
-  }
-
-  // [logging]
-  if (parsed["logging.log-dir"]?.trim())
-    config.logDir = validatePath(parsed["logging.log-dir"], "log-dir");
-  if (parsed["logging.progress-dir"]?.trim())
-    config.progressDir = validatePath(
-      parsed["logging.progress-dir"],
-      "progress-dir",
-    );
-}
-
-const ALLOWED_TEMP_PATHS = ["/tmp"];
-
-function validatePath(path: string, name: string): string {
-  const resolved = path.replace(/^~/, homedir());
-  const absolute = resolved.startsWith("/")
-    ? resolved
-    : join(process.cwd(), resolved);
-  if (
-    absolute.startsWith(homedir()) ||
-    absolute.startsWith("/tmp/") ||
-    ALLOWED_TEMP_PATHS.includes(absolute)
-  ) {
-    return path;
-  }
-  logWarning(
-    `${name} path "${path}" escapes allowed directories, using default`,
+  if (parsed["willie.model"]?.trim())
+    config.willieModel = parsed["willie.model"];
+  assignEffort(
+    parsed,
+    "willie.effort",
+    (value) => {
+      config.willieEffort = value;
+    },
+    issues,
   );
-  return "";
-}
 
-/**
- * Apply legacy .env values to config object
- */
-function applyEnvToConfig(config: Config, env: Record<string, string>): void {
-  if (
-    env.ENGINE === "claude" ||
-    env.ENGINE === "opencode" ||
-    env.ENGINE === "codex"
-  )
-    config.engine = env.ENGINE;
-  if (env.MAX_ITERATIONS)
-    config.maxIterations = parseIntSafe(env.MAX_ITERATIONS, 10);
-  if (env.SLEEP_SECONDS)
-    config.sleepSeconds = parseIntSafe(env.SLEEP_SECONDS, 2);
-  if (env.SKIP_COMMIT !== undefined) {
-    const val = parseBool(env.SKIP_COMMIT);
-    if (val !== undefined) config.skipCommit = val;
-  }
-  if (env.PUSH_AFTER_COMMIT !== undefined) {
-    const val = parseBool(env.PUSH_AFTER_COMMIT);
-    if (val !== undefined) config.pushAfterCommit = val;
-  }
-  if (env.CLAUDE_MODEL) config.claudeModel = env.CLAUDE_MODEL;
-  if (env.CODEX_MODEL?.trim()) config.codexModel = env.CODEX_MODEL;
-  if (env.OC_PRIME_MODEL) config.ocPrimeModel = env.OC_PRIME_MODEL;
-  if (env.OC_FALL_MODEL?.trim()) config.ocFallModel = env.OC_FALL_MODEL;
-  if (env.SOFT_LIMIT_RETRIES)
-    config.softLimitRetries = parseIntSafe(env.SOFT_LIMIT_RETRIES, 3);
-  if (env.SOFT_LIMIT_WAIT)
-    config.softLimitWait = parseIntSafe(env.SOFT_LIMIT_WAIT, 30);
-  if (env.TEST_CMD?.trim()) config.testCmd = env.TEST_CMD;
-  if (env.SKIP_TEST_VERIFY !== undefined) {
-    const val = parseBool(env.SKIP_TEST_VERIFY);
-    if (val !== undefined) config.skipTestVerify = val;
-  }
-  if (env.MAX_CONSECUTIVE_FAILURES)
-    config.maxConsecutiveFailures = parseIntSafe(
-      env.MAX_CONSECUTIVE_FAILURES,
-      3,
+  if (parsed["logging.log-dir"] !== undefined) {
+    issues.push(
+      `logging.log-dir is not supported; logs always use ${SFK_LOG_DIR}.`,
     );
-  if (env.RALPH_LOG_DIR?.trim())
-    config.logDir = validatePath(env.RALPH_LOG_DIR, "log-dir");
-  if (env.RALPH_PROGRESS_DIR?.trim())
-    config.progressDir = validatePath(env.RALPH_PROGRESS_DIR, "progress-dir");
+  }
+  if (parsed["logging.progress-dir"] !== undefined) {
+    issues.push(
+      `logging.progress-dir is not supported; progress always uses ${SFK_PROGRESS_DIR}.`,
+    );
+  }
+
+  return issues;
 }
 
 /**
- * Ensure global config exists (self-healing)
+ * Ensure global config exists with every value commented out.
  */
 function ensureGlobalConfig(): void {
-  if (!existsSync(GLOBAL_CONFIG_FILE)) {
-    if (!existsSync(GLOBAL_CONFIG_DIR)) {
-      mkdirSync(GLOBAL_CONFIG_DIR, { recursive: true });
+  if (!existsSync(SFK_CONFIG_FILE)) {
+    if (!existsSync(SFK_HOME_DIR)) {
+      mkdirSync(SFK_HOME_DIR, { recursive: true });
     }
-    writeFileSync(GLOBAL_CONFIG_FILE, DEFAULT_CONFIG_CONTENT);
+    writeFileSync(SFK_CONFIG_FILE, EXAMPLE_CONFIG_CONTENT);
   }
 }
 
-/**
- * Check for legacy config and warn
- */
-function checkLegacyConfig(): boolean {
-  const legacyGlobal = existsSync(LEGACY_GLOBAL_FILE);
-  const legacyProject = existsSync(join(process.cwd(), LEGACY_PROJECT_FILE));
-
-  if (legacyGlobal || legacyProject) {
-    const locations: string[] = [];
-    if (legacyGlobal) locations.push(LEGACY_GLOBAL_FILE);
-    if (legacyProject) locations.push(LEGACY_PROJECT_FILE);
-    logWarning(
-      `Found legacy config: ${locations.join(", ")}. ` +
-        `Migrate to new format at ${GLOBAL_CONFIG_FILE}. ` +
-        `See config.example for the new INI format.`,
-    );
-    return true;
+function requireConfigValue<T>(
+  key: string,
+  value: T | undefined,
+  issues: string[],
+): T {
+  if (
+    value === undefined ||
+    (typeof value === "string" && value.trim() === "")
+  ) {
+    issues.push(`${key} is required.`);
   }
-  return false;
+
+  return value as T;
 }
 
-function defaultConfig(): Config {
+function buildConfigErrorMessage(issues: string[]): string {
+  return [
+    "SFK needs a complete config before it can run.",
+    "",
+    `Config file: ${SFK_CONFIG_FILE}`,
+    "",
+    "Open that file, uncomment the settings you want, and fill in every required value.",
+    "The generated file and config.example show the available keys.",
+    "",
+    "Missing or invalid settings:",
+    ...issues.map((issue) => `- ${issue}`),
+  ].join("\n");
+}
+
+function completeConfig(config: Partial<Config>, issues: string[]): Config {
+  const engine = requireConfigValue("engine.type", config.engine, issues);
+  const claudeModel = requireConfigValue(
+    "models.claude",
+    config.claudeModel,
+    issues,
+  );
+  const claudeEffort = requireConfigValue(
+    "models.effort",
+    config.claudeEffort,
+    issues,
+  );
+  const codexModel = requireConfigValue(
+    "models.codex",
+    config.codexModel,
+    issues,
+  );
+  const ocPrimeModel = requireConfigValue(
+    "models.opencode-primary",
+    config.ocPrimeModel,
+    issues,
+  );
+  const softLimitRetries = requireConfigValue(
+    "rate-limits.soft-retries",
+    config.softLimitRetries,
+    issues,
+  );
+  const softLimitWait = requireConfigValue(
+    "rate-limits.soft-wait",
+    config.softLimitWait,
+    issues,
+  );
+  const maxIterations = requireConfigValue(
+    "ralph.max-iterations",
+    config.maxIterations,
+    issues,
+  );
+  const sleepSeconds = requireConfigValue(
+    "ralph.sleep-seconds",
+    config.sleepSeconds,
+    issues,
+  );
+  const skipCommit = requireConfigValue(
+    "ralph.skip-commit",
+    config.skipCommit,
+    issues,
+  );
+  const pushAfterCommit = requireConfigValue(
+    "ralph.push-after-commit",
+    config.pushAfterCommit,
+    issues,
+  );
+  const skipTestVerify = requireConfigValue(
+    "ralph.skip-test-verify",
+    config.skipTestVerify,
+    issues,
+  );
+  const maxConsecutiveFailures = requireConfigValue(
+    "ralph.max-consecutive-failures",
+    config.maxConsecutiveFailures,
+    issues,
+  );
+  const auditAfterComplete = requireConfigValue(
+    "ralph.audit-after-complete",
+    config.auditAfterComplete,
+    issues,
+  );
+  const willieMaxIterations = requireConfigValue(
+    "willie.max-iterations",
+    config.willieMaxIterations,
+    issues,
+  );
+
+  if (issues.length > 0) {
+    throw new ConfigError(buildConfigErrorMessage(issues));
+  }
+
   return {
-    engine: "opencode",
-    claudeModel: "sonnet",
-    claudeEffort: "high",
-    codexModel: undefined,
-    ocPrimeModel: DEFAULT_OC_PRIME_MODEL,
-    ocFallModel: undefined,
-    softLimitRetries: 3,
-    softLimitWait: 30,
-    maxIterations: 10,
-    sleepSeconds: 2,
-    skipCommit: false,
-    pushAfterCommit: false,
-    skipTestVerify: false,
-    maxConsecutiveFailures: 3,
-    testCmd: undefined,
-    ralphModel: undefined,
-    ralphEffort: undefined,
-    willieMaxIterations: 0,
-    willieAuditPrompt: undefined,
-    willieModel: undefined,
-    willieEffort: undefined,
-    lintCmd: undefined,
-    logDir: join(homedir(), ".sfk", "logs"),
-    progressDir: join(homedir(), ".sfk", "progress"),
-    auditAfterComplete: false,
+    engine,
+    claudeModel,
+    claudeEffort,
+    codexModel,
+    ocPrimeModel,
+    ocFallModel: config.ocFallModel,
+    softLimitRetries,
+    softLimitWait,
+    maxIterations,
+    sleepSeconds,
+    skipCommit,
+    pushAfterCommit,
+    skipTestVerify,
+    maxConsecutiveFailures,
+    testCmd: config.testCmd,
+    ralphModel: config.ralphModel,
+    ralphEffort: config.ralphEffort,
+    willieMaxIterations,
+    willieAuditPrompt: config.willieAuditPrompt,
+    willieModel: config.willieModel,
+    willieEffort: config.willieEffort,
+    lintCmd: config.lintCmd,
+    logDir: SFK_LOG_DIR,
+    progressDir: SFK_PROGRESS_DIR,
+    auditAfterComplete,
   };
 }
 
 /**
- * Load config with priority:
- * 1. CLI arguments (handled separately in args.ts)
- * 2. Environment variables
- * 3. Project config (.sfk/config)
- * 4. Global config (~/.config/sfk/config)
- *
- * Falls back to legacy .env format if new config doesn't exist.
+ * Load config from ~/.sfk/config. CLI arguments are merged separately.
  */
 export function loadConfig(): Config {
-  const config = defaultConfig();
+  ensureGlobalConfig();
 
-  const hasNewGlobal = existsSync(GLOBAL_CONFIG_FILE);
-  const hasNewProject = existsSync(join(process.cwd(), PROJECT_CONFIG_FILE));
-  const hasLegacy = checkLegacyConfig();
+  try {
+    const content = readFileSync(SFK_CONFIG_FILE, "utf-8");
+    const config: Partial<Config> = {
+      logDir: SFK_LOG_DIR,
+      progressDir: SFK_PROGRESS_DIR,
+    };
+    const issues = applyConfigToConfig(config, parseConfigFile(content));
 
-  if (hasNewGlobal || hasNewProject) {
-    // New INI format
-    ensureGlobalConfig();
+    return completeConfig(config, issues);
+  } catch (error) {
+    if (error instanceof ConfigError) throw error;
 
-    try {
-      const globalContent = readFileSync(GLOBAL_CONFIG_FILE, "utf-8");
-      applyConfigToConfig(config, parseConfigFile(globalContent));
-    } catch (err) {
-      throw new Error(
-        `Failed to read global config from ${GLOBAL_CONFIG_FILE}: ${err}`,
-      );
-    }
-
-    const projectPath = join(process.cwd(), PROJECT_CONFIG_FILE);
-    if (existsSync(projectPath)) {
-      try {
-        const projectContent = readFileSync(projectPath, "utf-8");
-        applyConfigToConfig(config, parseConfigFile(projectContent));
-      } catch (err) {
-        throw new Error(
-          `Failed to read project config from ${projectPath}: ${err}`,
-        );
-      }
-    }
-  } else if (hasLegacy) {
-    // Fall back to legacy .env format
-    if (existsSync(LEGACY_GLOBAL_FILE)) {
-      try {
-        const content = readFileSync(LEGACY_GLOBAL_FILE, "utf-8");
-        applyEnvToConfig(config, parseEnvFile(content));
-      } catch (err) {
-        throw new Error(
-          `Failed to read legacy global config from ${LEGACY_GLOBAL_FILE}: ${err}`,
-        );
-      }
-    }
-    const legacyProjectPath = join(process.cwd(), LEGACY_PROJECT_FILE);
-    if (existsSync(legacyProjectPath)) {
-      try {
-        const content = readFileSync(legacyProjectPath, "utf-8");
-        applyEnvToConfig(config, parseEnvFile(content));
-      } catch (err) {
-        throw new Error(
-          `Failed to read legacy project config from ${legacyProjectPath}: ${err}`,
-        );
-      }
-    }
-  } else {
-    // No config at all — create new global config
-    ensureGlobalConfig();
-    try {
-      const globalContent = readFileSync(GLOBAL_CONFIG_FILE, "utf-8");
-      applyConfigToConfig(config, parseConfigFile(globalContent));
-    } catch (err) {
-      throw new Error(
-        `Failed to read newly created global config from ${GLOBAL_CONFIG_FILE}: ${err}`,
-      );
-    }
+    throw new ConfigError(
+      `SFK could not read its config at ${SFK_CONFIG_FILE}.\n\n${error}`,
+    );
   }
-
-  // Environment variables override everything (use legacy env var names for compat)
-  const processEnv: Record<string, string> = {};
-  if (process.env.ENGINE) processEnv.ENGINE = process.env.ENGINE;
-  if (process.env.MAX_ITERATIONS)
-    processEnv.MAX_ITERATIONS = process.env.MAX_ITERATIONS;
-  if (process.env.SLEEP_SECONDS)
-    processEnv.SLEEP_SECONDS = process.env.SLEEP_SECONDS;
-  if (process.env.SKIP_COMMIT) processEnv.SKIP_COMMIT = process.env.SKIP_COMMIT;
-  if (process.env.PUSH_AFTER_COMMIT)
-    processEnv.PUSH_AFTER_COMMIT = process.env.PUSH_AFTER_COMMIT;
-  if (process.env.CLAUDE_MODEL)
-    processEnv.CLAUDE_MODEL = process.env.CLAUDE_MODEL;
-  if (process.env.CODEX_MODEL) processEnv.CODEX_MODEL = process.env.CODEX_MODEL;
-  if (process.env.OC_PRIME_MODEL)
-    processEnv.OC_PRIME_MODEL = process.env.OC_PRIME_MODEL;
-  if (process.env.OC_FALL_MODEL)
-    processEnv.OC_FALL_MODEL = process.env.OC_FALL_MODEL;
-  if (process.env.SOFT_LIMIT_RETRIES)
-    processEnv.SOFT_LIMIT_RETRIES = process.env.SOFT_LIMIT_RETRIES;
-  if (process.env.SOFT_LIMIT_WAIT)
-    processEnv.SOFT_LIMIT_WAIT = process.env.SOFT_LIMIT_WAIT;
-  if (process.env.TEST_CMD) processEnv.TEST_CMD = process.env.TEST_CMD;
-  if (process.env.SKIP_TEST_VERIFY)
-    processEnv.SKIP_TEST_VERIFY = process.env.SKIP_TEST_VERIFY;
-  if (process.env.MAX_CONSECUTIVE_FAILURES)
-    processEnv.MAX_CONSECUTIVE_FAILURES = process.env.MAX_CONSECUTIVE_FAILURES;
-  if (process.env.RALPH_LOG_DIR)
-    processEnv.RALPH_LOG_DIR = process.env.RALPH_LOG_DIR;
-  if (process.env.RALPH_PROGRESS_DIR)
-    processEnv.RALPH_PROGRESS_DIR = process.env.RALPH_PROGRESS_DIR;
-
-  applyEnvToConfig(config, processEnv);
-
-  if (!config.logDir) {
-    config.logDir = join(homedir(), ".sfk", "logs");
-  }
-  if (!config.progressDir) {
-    config.progressDir = join(homedir(), ".sfk", "progress");
-  }
-
-  return config;
 }
 
 /**
  * Get the current model based on engine type
  */
 export function getCurrentModel(config: Config): string {
-  return getEngineDefaultModel(config);
+  return getEngineModel(config);
 }
 
 /**
- * Get the effective model for ralph (per-agent override or global default)
+ * Get the effective model for ralph (per-agent override or configured engine model)
  */
 export function getRalphModel(config: Config): string {
   return getEffectiveAgentModel(config, "ralph");
@@ -592,7 +616,7 @@ export function getRalphEffort(config: Config): EffortLevel {
 }
 
 /**
- * Get the effective model for willie (defaults to engine's primary model)
+ * Get the effective model for willie.
  */
 export function getWillieModel(config: Config): string {
   return getEffectiveAgentModel(config, "willie");
@@ -607,9 +631,16 @@ export function getWillieEffort(config: Config): EffortLevel {
 
 type AgentName = "ralph" | "willie";
 
-function getEngineDefaultModel(config: Config): string {
+function getEngineModel(config: Config): string {
   if (config.engine === "claude") return config.claudeModel;
-  if (config.engine === "codex") return config.codexModel ?? "default";
+  if (config.engine === "codex") {
+    if (!config.codexModel) {
+      throw new ConfigError(
+        "models.codex is required when engine.type is codex.",
+      );
+    }
+    return config.codexModel;
+  }
   return config.ocPrimeModel;
 }
 
@@ -622,7 +653,7 @@ function getEffectiveAgentModel(config: Config, agent: AgentName): string {
     return config.ralphModel ?? config.claudeModel;
   }
 
-  return getEngineDefaultModel(config);
+  return getEngineModel(config);
 }
 
 function getEffectiveAgentEffort(
@@ -634,9 +665,5 @@ function getEffectiveAgentEffort(
 }
 
 export function getGlobalConfigPath(): string {
-  return GLOBAL_CONFIG_FILE;
-}
-
-export function getProjectConfigPath(): string {
-  return PROJECT_CONFIG_FILE;
+  return SFK_CONFIG_FILE;
 }

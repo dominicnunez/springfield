@@ -1,4 +1,4 @@
-import { DEFAULT_OC_PRIME_MODEL, type EffortLevel } from "../config/loader.js";
+import type { EffortLevel } from "../config/loader.js";
 import { logWarning } from "../ui/logger.js";
 import type { Engine, EngineResult } from "./base.js";
 import { getEngineEffortConfig } from "./effort.js";
@@ -36,7 +36,7 @@ export class OpenCodeEngine implements Engine {
   private usingFallback = false;
 
   constructor(
-    model: string = DEFAULT_OC_PRIME_MODEL,
+    model: string,
     fallbackModel?: string,
     effort: EffortLevel = "high",
   ) {

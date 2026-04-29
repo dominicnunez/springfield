@@ -5,6 +5,7 @@ import type { Config } from "../loader.js";
 import {
   applyConfigToConfig,
   getCurrentModel,
+  getGlobalConfigPath,
   getRalphEffort,
   getRalphModel,
   getWillieEffort,
@@ -96,7 +97,7 @@ test-cmd = KEY=VAL bun test
     test("strips trailing inline comments from unquoted values", () => {
       const result = parseConfigFile(`
 [models]
-effort = high # global default
+effort = high # configured effort
 
 [ralph]
 skip-commit = false # keep commits enabled
@@ -203,8 +204,11 @@ progress-dir = /tmp/progress
 
     test("ignores invalid engine type", () => {
       const config = baseConfig();
-      applyConfigToConfig(config, { "engine.type": "invalid" });
+      const issues = applyConfigToConfig(config, { "engine.type": "invalid" });
       expect(config.engine).toBe("opencode");
+      expect(issues).toContain(
+        "engine.type must be one of: opencode, claude, codex.",
+      );
     });
 
     test("applies model settings", () => {
@@ -225,8 +229,11 @@ progress-dir = /tmp/progress
 
     test("ignores invalid effort level", () => {
       const config = baseConfig();
-      applyConfigToConfig(config, { "models.effort": "turbo" });
+      const issues = applyConfigToConfig(config, { "models.effort": "turbo" });
       expect(config.claudeEffort).toBe("high"); // unchanged
+      expect(issues).toContain(
+        "models.effort must be one of: low, medium, high, xhigh.",
+      );
     });
 
     test("accepts xhigh effort level", () => {
@@ -285,14 +292,32 @@ progress-dir = /tmp/progress
       expect(config.willieEffort).toBe("xhigh");
     });
 
-    test("applies logging settings", () => {
+    test("rejects logging settings because paths are fixed", () => {
       const config = baseConfig();
-      applyConfigToConfig(config, {
+      const issues = applyConfigToConfig(config, {
         "logging.log-dir": "/tmp/logs",
         "logging.progress-dir": "/tmp/progress",
       });
-      expect(config.logDir).toBe("/tmp/logs");
-      expect(config.progressDir).toBe("/tmp/progress");
+      expect(config.logDir).toBe(join(homedir(), ".sfk", "logs"));
+      expect(config.progressDir).toBe(join(homedir(), ".sfk", "progress"));
+      expect(issues).toContain(
+        `logging.log-dir is not supported; logs always use ${join(homedir(), ".sfk", "logs")}.`,
+      );
+      expect(issues).toContain(
+        `logging.progress-dir is not supported; progress always uses ${join(homedir(), ".sfk", "progress")}.`,
+      );
+    });
+
+    test("reports invalid integer settings", () => {
+      const config = baseConfig();
+      const issues = applyConfigToConfig(config, {
+        "ralph.max-consecutive-failures": "0",
+      });
+
+      expect(config.maxConsecutiveFailures).toBe(3);
+      expect(issues).toContain(
+        "ralph.max-consecutive-failures must be an integer >= 1.",
+      );
     });
 
     test("later apply overrides earlier values", () => {
@@ -348,6 +373,12 @@ progress-dir = /tmp/progress
           baseConfig({ engine: "codex", codexModel: "gpt-5-codex" }),
         ),
       ).toBe("gpt-5-codex");
+    });
+
+    test("getCurrentModel rejects missing codex model", () => {
+      expect(() =>
+        getCurrentModel(baseConfig({ engine: "codex", codexModel: undefined })),
+      ).toThrow("models.codex is required when engine.type is codex.");
     });
 
     test("getRalphModel uses per-agent override for claude", () => {
@@ -412,17 +443,17 @@ progress-dir = /tmp/progress
       );
     });
 
-    test("getWillieModel defaults to engine's primary model (opencode)", () => {
+    test("getWillieModel inherits engine model for opencode", () => {
       expect(getWillieModel(baseConfig())).toBe("big-pickle");
     });
 
-    test("getWillieModel defaults to engine's primary model (claude)", () => {
+    test("getWillieModel inherits engine model for claude", () => {
       expect(
         getWillieModel(baseConfig({ engine: "claude", claudeModel: "sonnet" })),
       ).toBe("sonnet");
     });
 
-    test("getWillieModel defaults to engine's primary model (codex)", () => {
+    test("getWillieModel inherits engine model for codex", () => {
       expect(
         getWillieModel(baseConfig({ engine: "codex", codexModel: "gpt-5" })),
       ).toBe("gpt-5");
@@ -436,6 +467,10 @@ progress-dir = /tmp/progress
       expect(getWillieEffort(baseConfig({ claudeEffort: "medium" }))).toBe(
         "medium",
       );
+    });
+
+    test("getGlobalConfigPath uses ~/.sfk/config", () => {
+      expect(getGlobalConfigPath()).toBe(join(homedir(), ".sfk", "config"));
     });
   });
 });

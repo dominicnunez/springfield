@@ -76,17 +76,17 @@ describe("engine factory", () => {
     expect((engine as ClaudeEngine).effort).toBe("medium");
   });
 
-  test("creates Willie Codex engine without explicit model for default", () => {
+  test("creates Willie Codex engine with configured model", () => {
     const engine = createWillieEngine(
       baseConfig({
         engine: "codex",
-        codexModel: undefined,
+        codexModel: "gpt-5-codex",
         willieModel: undefined,
       }),
     );
 
     expect(engine).toBeInstanceOf(CodexEngine);
-    expect(engine.model).toBe("default");
+    expect(engine.model).toBe("gpt-5-codex");
     expect((engine as unknown as { effort: string }).effort).toBe("medium");
   });
 

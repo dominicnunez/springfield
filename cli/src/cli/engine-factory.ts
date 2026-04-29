@@ -50,7 +50,7 @@ export function createWillieEngine(config: Config): Engine {
   }
 
   if (config.engine === "codex") {
-    return new CodexEngine(model === "default" ? undefined : model, effort);
+    return new CodexEngine(model, effort);
   }
 
   return new ClaudeEngine(model, effort);

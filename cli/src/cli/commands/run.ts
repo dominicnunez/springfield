@@ -184,7 +184,7 @@ function logRunStartup(
   } else {
     console.log(
       pc.yellow(
-        "  No test command detected (configure test-cmd in .sfk/config)",
+        "  No test command detected (configure test-cmd in ~/.sfk/config)",
       ),
     );
     logWarning("No test command detected");
@@ -347,8 +347,8 @@ export async function runLoop(
   const { engine, logFile, progressFile, projectName, testCmd } = session;
 
   if (config.maxIterations < -1) {
-    logWarning("Invalid maxIterations value, defaulting to 10");
-    config.maxIterations = 10;
+    logError("Invalid maxIterations value; expected -1 or greater.");
+    process.exit(1);
   }
 
   logRunStartup(config, session, "loop");

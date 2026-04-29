@@ -1,8 +1,11 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { Config } from "../config/loader.js";
-import { getWillieEffort, getWillieModel } from "../config/loader.js";
+import {
+  getWillieEffort,
+  getWillieModel,
+  SFK_AUDIT_PROMPT_FILE,
+} from "../config/loader.js";
 import { type Engine, generateFixPrompt } from "../engines/base.js";
 import { detectLintCommand, detectTestCommand } from "../tasks/verification.js";
 import { AUDIT_PROMPT_FILE, ensureAuditDirectories } from "./audit-paths.js";
@@ -49,9 +52,11 @@ export function resolveAuditPrompt(
     };
   }
 
-  const globalPrompt = join(homedir(), ".config", "sfk", "audit-prompt.md");
-  if (existsSync(globalPrompt)) {
-    return { text: readFileSync(globalPrompt, "utf-8"), source: globalPrompt };
+  if (existsSync(SFK_AUDIT_PROMPT_FILE)) {
+    return {
+      text: readFileSync(SFK_AUDIT_PROMPT_FILE, "utf-8"),
+      source: SFK_AUDIT_PROMPT_FILE,
+    };
   }
 
   return { text: fallbackPrompt, source: "built-in default" };

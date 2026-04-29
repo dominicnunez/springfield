@@ -6,7 +6,7 @@ Canonical documentation lives in the repository root README:
 
 For local development, run `cd cli && bun install` to install dependencies and Husky hooks.
 
-Engine effort follows the root configuration:
+Engine effort follows `~/.sfk/config`:
 - Claude: `low`, `medium`, `high`
 - Codex/OpenCode: `low`, `medium`, `high`, `xhigh`
 

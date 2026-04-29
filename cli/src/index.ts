@@ -4,7 +4,7 @@ import { resolveAuditConfig } from "./cli/audit-config.js";
 import { auditLoop } from "./cli/commands/audit.js";
 import { pruneExceptions } from "./cli/commands/prune.js";
 import { runLoop, runSingleTask } from "./cli/commands/run.js";
-import { loadConfig } from "./config/loader.js";
+import { ConfigError, loadConfig } from "./config/loader.js";
 import { logError } from "./ui/logger.js";
 
 async function main(): Promise<void> {
@@ -50,6 +50,12 @@ async function main(): Promise<void> {
 
     await runLoop(finalConfig, runOptions);
   } catch (error) {
+    if (error instanceof ConfigError) {
+      logError(error.message);
+      process.exitCode = 1;
+      return;
+    }
+
     logError(
       error instanceof Error ? error.stack || error.message : String(error),
     );

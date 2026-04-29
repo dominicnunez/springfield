@@ -112,8 +112,8 @@ function createMockChild(
 
 describe("OpenCodeEngine", () => {
   describe("constructor", () => {
-    test("uses default model when none provided", () => {
-      const engine = new OpenCodeEngine();
+    test("uses provided model", () => {
+      const engine = new OpenCodeEngine("big-pickle");
       expect(engine.name).toBe("opencode");
       expect(engine.model).toBe("big-pickle");
     });
@@ -141,7 +141,7 @@ describe("OpenCodeEngine", () => {
         signal: null,
       } as unknown as ReturnType<typeof childProcess.spawnSync>);
 
-      const engine = new OpenCodeEngine();
+      const engine = new OpenCodeEngine("test-model");
       expect(engine.isAvailable()).toBe(true);
       expect(spy).toHaveBeenCalledWith("which", ["opencode"], {
         encoding: "utf-8",
@@ -160,7 +160,7 @@ describe("OpenCodeEngine", () => {
         signal: null,
       } as unknown as ReturnType<typeof childProcess.spawnSync>);
 
-      const engine = new OpenCodeEngine();
+      const engine = new OpenCodeEngine("test-model");
       expect(engine.isAvailable()).toBe(false);
 
       spy.mockRestore();
@@ -211,7 +211,7 @@ describe("OpenCodeEngine", () => {
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
 
-      const engine = new OpenCodeEngine();
+      const engine = new OpenCodeEngine("test-model");
       const result = await engine.run("test prompt");
 
       expect(result.rateLimited).toBe(true);
@@ -232,7 +232,7 @@ describe("OpenCodeEngine", () => {
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
 
-      const engine = new OpenCodeEngine();
+      const engine = new OpenCodeEngine("test-model");
       const result = await engine.run("test prompt");
 
       expect(result.rateLimited).toBe(true);
@@ -253,7 +253,7 @@ describe("OpenCodeEngine", () => {
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
 
-      const engine = new OpenCodeEngine();
+      const engine = new OpenCodeEngine("test-model");
       const result = await engine.run("test prompt");
 
       expect(result.rateLimited).toBe(true);
@@ -272,7 +272,7 @@ describe("OpenCodeEngine", () => {
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
 
-      const engine = new OpenCodeEngine();
+      const engine = new OpenCodeEngine("test-model");
       const result = await engine.run("test prompt");
 
       expect(result.rateLimited).toBe(false);
@@ -352,7 +352,7 @@ describe("OpenCodeEngine", () => {
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
 
-      const engine = new OpenCodeEngine();
+      const engine = new OpenCodeEngine("test-model");
       const result = await engine.run("test");
 
       expect(result.success).toBe(true);
@@ -372,7 +372,7 @@ describe("OpenCodeEngine", () => {
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
 
-      const engine = new OpenCodeEngine();
+      const engine = new OpenCodeEngine("test-model");
       const result = await engine.run("test");
 
       expect(result.success).toBe(true);
@@ -386,7 +386,7 @@ describe("OpenCodeEngine", () => {
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
 
-      const engine = new OpenCodeEngine();
+      const engine = new OpenCodeEngine("test-model");
       const result = await engine.run("test");
 
       expect(result.success).toBe(true);
@@ -400,7 +400,7 @@ describe("OpenCodeEngine", () => {
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
 
-      const engine = new OpenCodeEngine();
+      const engine = new OpenCodeEngine("test-model");
       const result = await engine.run("test");
 
       expect(result.success).toBe(false);
@@ -418,7 +418,7 @@ describe("OpenCodeEngine", () => {
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
 
-      const engine = new OpenCodeEngine();
+      const engine = new OpenCodeEngine("test-model");
       const result = await engine.run("test");
 
       expect(result.output).toContain("plain text line");
@@ -432,7 +432,7 @@ describe("OpenCodeEngine", () => {
         mockChild as unknown as ReturnType<typeof childProcess.spawn>,
       );
 
-      const engine = new OpenCodeEngine();
+      const engine = new OpenCodeEngine("test-model");
       const resultPromise = engine.run("test");
 
       mockChild.emit("close", null);
