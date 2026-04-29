@@ -40,25 +40,25 @@ describe("audit step prompt building", () => {
 
     expect(prompt).toContain("base audit prompt");
     expect(prompt).toContain(
-      "Before writing audit/report.md, inspect audit/exceptions/*.md as needed and compare each candidate finding against relevant exception entries.",
+      "Before writing audit/report.md, inspect the mirrored exception file for each candidate finding as needed; for src/auth.ts, inspect audit/exceptions/src/auth.md.",
     );
     expect(prompt).toContain(
-      "Read only the exception files and entries needed to rule in or rule out a candidate finding; do not ignore the directory, but avoid loading unrelated exception content.",
+      "Read only the mirrored exception files and entries needed to rule in or rule out a candidate finding; do not ignore the directory, but avoid loading unrelated exception content.",
     );
   });
 
   test("lists current exception files without injecting their contents", () => {
     const exceptionsDir = join(projectDir, "audit", "exceptions");
-    mkdirSync(exceptionsDir, { recursive: true });
+    mkdirSync(join(exceptionsDir, "src"), { recursive: true });
     writeFileSync(
-      join(exceptionsDir, "design.md"),
-      "# Exceptions\n\n### Accepted rate limit tradeoff\n**Location:** `src/rate-limit.ts:12`\nCurrent backoff is intentional.\n",
+      join(exceptionsDir, "src", "rate-limit.md"),
+      "# Exceptions\n\n### Accepted rate limit tradeoff\n**Line:** `12`\nCurrent backoff is intentional.\n",
     );
 
     const prompt = buildAuditPromptWithExceptions("base audit prompt");
 
     expect(prompt).toContain("Known exception files:");
-    expect(prompt).toContain("audit/exceptions/design.md");
+    expect(prompt).toContain("audit/exceptions/src/rate-limit.md");
     expect(prompt).toContain(
       "If an exception still applies, suppress that finding instead of re-reporting it.",
     );
@@ -97,21 +97,21 @@ describe("audit step prompt building", () => {
 
   test("findMatchingException requires file match and textual similarity", () => {
     const exceptionsDir = join(projectDir, "audit", "exceptions");
-    mkdirSync(exceptionsDir, { recursive: true });
-    const filePath = join(exceptionsDir, "design.md");
+    mkdirSync(join(exceptionsDir, "src"), { recursive: true });
+    const filePath = join(exceptionsDir, "src", "auth.md");
     writeFileSync(
       filePath,
-      `# Design
+      `# Auth exceptions
 
 ### Hardcoded credentials in auth config
 
-**Location:** \`src/auth.ts:12\`
+**Line:** \`12\`
 
 **Reason:** This exact hardcoded credentials finding is accepted by design.
 
 ### Different issue on same file
 
-**Location:** \`src/auth.ts:99\`
+**Line:** \`99\`
 
 **Reason:** This is about timeout behavior, not credentials.
 `,
@@ -135,16 +135,41 @@ describe("audit step prompt building", () => {
     expect(findMatchingException(nonMatching)).toBeUndefined();
   });
 
+  test("findMatchingException ignores exceptions in other mirrored files", () => {
+    const exceptionsDir = join(projectDir, "audit", "exceptions");
+    mkdirSync(join(exceptionsDir, "src"), { recursive: true });
+    writeFileSync(
+      join(exceptionsDir, "src", "api.md"),
+      `# API exceptions
+
+### Hardcoded credentials in auth config
+
+**Line:** \`12\`
+
+**Reason:** This exact hardcoded credentials finding is accepted by design.
+`,
+    );
+
+    const [finding] = parseAuditReport(`### [Security] Hardcoded credentials
+- **Severity**: Critical
+- **File**: src/auth.ts:42
+- **Details**: Password is hardcoded in source.
+- **Suggested fix**: Load from environment.
+`);
+
+    expect(findMatchingException(finding)).toBeUndefined();
+  });
+
   test("applyExceptionFilterToReport removes matched findings and keeps unmatched findings", () => {
     const exceptionsDir = join(projectDir, "audit", "exceptions");
-    mkdirSync(exceptionsDir, { recursive: true });
+    mkdirSync(join(exceptionsDir, "src"), { recursive: true });
     writeFileSync(
-      join(exceptionsDir, "risks.md"),
-      `# Risks
+      join(exceptionsDir, "src", "auth.md"),
+      `# Auth exceptions
 
 ### Hardcoded credentials
 
-**Location:** \`src/auth.ts:12\`
+**Line:** \`12\`
 
 **Reason:** Password is hardcoded in source and tracked as an accepted risk.
 `,
@@ -180,14 +205,14 @@ describe("audit step prompt building", () => {
 
   test("applyExceptionFilterToReport deletes the report when all findings are suppressed", () => {
     const exceptionsDir = join(projectDir, "audit", "exceptions");
-    mkdirSync(exceptionsDir, { recursive: true });
+    mkdirSync(join(exceptionsDir, "src"), { recursive: true });
     writeFileSync(
-      join(exceptionsDir, "risks.md"),
-      `# Risks
+      join(exceptionsDir, "src", "auth.md"),
+      `# Auth exceptions
 
 ### Hardcoded credentials
 
-**Location:** \`src/auth.ts:12\`
+**Line:** \`12\`
 
 **Reason:** Password is hardcoded in source and tracked as an accepted risk.
 `,
@@ -210,18 +235,18 @@ describe("audit step prompt building", () => {
 
   test("parseChangedExceptionFiles returns only changed exception markdown files", () => {
     const files = parseChangedExceptionFiles([
-      " M audit/exceptions/misreads.md",
-      "A  audit/exceptions/design.md",
-      "?? audit/exceptions/risks.md",
+      " M audit/exceptions/src/auth.md",
+      "A  audit/exceptions/src/api.md",
+      "?? audit/exceptions/cli/run.md",
       " M audit/report.md",
       " M src/index.ts",
-      "R  audit/exceptions/old.md -> audit/exceptions/new.md",
+      "R  audit/exceptions/old/path.md -> audit/exceptions/new/path.md",
     ]);
 
     expect(files).toEqual([
-      "audit/exceptions/design.md",
-      "audit/exceptions/misreads.md",
-      "audit/exceptions/risks.md",
+      "audit/exceptions/cli/run.md",
+      "audit/exceptions/src/api.md",
+      "audit/exceptions/src/auth.md",
     ]);
   });
 });

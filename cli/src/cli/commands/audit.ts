@@ -2,7 +2,6 @@ import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
   existsSync,
-  readdirSync,
   readFileSync,
   unlinkSync,
   writeFileSync,
@@ -24,7 +23,12 @@ import {
   logSuccess,
   logWarning,
 } from "../../ui/logger.js";
-import { AUDIT_EXCEPTIONS_DIR, AUDIT_REPORT_FILE } from "../audit-paths.js";
+import {
+  AUDIT_EXCEPTIONS_DIR,
+  AUDIT_REPORT_FILE,
+  exceptionFileForSourceFile,
+  listExceptionMarkdownFiles,
+} from "../audit-paths.js";
 import { initializeAuditSession } from "../audit-session.js";
 import { switchToFallbackWithNotice } from "../engine-fallback.js";
 import { runGitLines } from "../git.js";
@@ -205,19 +209,19 @@ function normalizeFilePath(file: string): string {
   return file.split(":")[0].trim();
 }
 
-function loadExceptionEntries(): ExceptionEntry[] {
-  if (!existsSync(AUDIT_EXCEPTIONS_DIR)) return [];
-  const mdFiles = readdirSync(AUDIT_EXCEPTIONS_DIR)
-    .filter((f) => f.endsWith(".md"))
-    .sort();
-  const entries: ExceptionEntry[] = [];
-  for (const file of mdFiles) {
-    const filePath = join(AUDIT_EXCEPTIONS_DIR, file);
-    const content = readFileSync(filePath, "utf-8").trim();
-    const parsed = parseExceptionFile(filePath, content);
-    entries.push(...parsed.entries);
-  }
-  return entries;
+function loadExceptionEntriesFromFile(filePath: string): ExceptionEntry[] {
+  if (!existsSync(filePath)) return [];
+
+  const content = readFileSync(filePath, "utf-8").trim();
+  if (!content) return [];
+
+  return parseExceptionFile(filePath, content).entries;
+}
+
+function loadExceptionEntriesForSourceFile(
+  sourceFile: string,
+): ExceptionEntry[] {
+  return loadExceptionEntriesFromFile(exceptionFileForSourceFile(sourceFile));
 }
 
 function normalizeText(value: string): string {
@@ -259,12 +263,9 @@ function textSimilar(a: string, b: string): boolean {
 
 export function findMatchingException(
   finding: AuditFinding,
-  entries: ExceptionEntry[] = loadExceptionEntries(),
+  entries: ExceptionEntry[] = loadExceptionEntriesForSourceFile(finding.file),
 ): ExceptionEntry | undefined {
   return entries.find((entry) => {
-    if (!entry.location) return false;
-    if (normalizeFilePath(entry.location) !== finding.file) return false;
-
     return (
       textSimilar(finding.title, entry.heading) ||
       textSimilar(finding.details, entry.heading) ||
@@ -280,9 +281,13 @@ function rebuildAuditReport(findings: AuditFinding[]): string {
 
 function collectExceptionsForFindingFiles(findingFiles: Set<string>): string {
   if (findingFiles.size === 0) return "";
-  const matched = loadExceptionEntries()
-    .filter((entry) => entry.location && findingFiles.has(entry.location))
-    .map((entry) => entry.rawText);
+  const matched: string[] = [];
+
+  for (const file of [...findingFiles].sort()) {
+    matched.push(
+      ...loadExceptionEntriesForSourceFile(file).map((entry) => entry.rawText),
+    );
+  }
 
   return matched.join("\n\n");
 }
@@ -298,9 +303,17 @@ export function applyExceptionFilterToReport(): ReportFilterResult {
     return { originalCount: 0, suppressedCount: 0, remainingCount: 0 };
   }
 
-  const entries = loadExceptionEntries();
+  const entriesBySourceFile = new Map<string, ExceptionEntry[]>();
+  const getEntries = (sourceFile: string): ExceptionEntry[] => {
+    const cached = entriesBySourceFile.get(sourceFile);
+    if (cached) return cached;
+
+    const entries = loadExceptionEntriesForSourceFile(sourceFile);
+    entriesBySourceFile.set(sourceFile, entries);
+    return entries;
+  };
   const remainingFindings = findings.filter(
-    (finding) => !findMatchingException(finding, entries),
+    (finding) => !findMatchingException(finding, getEntries(finding.file)),
   );
 
   if (remainingFindings.length === 0) {
@@ -318,8 +331,9 @@ export function applyExceptionFilterToReport(): ReportFilterResult {
 
 export function buildAuditPromptWithExceptions(auditPrompt: string): string {
   const instructions = [
-    "Before writing audit/report.md, inspect audit/exceptions/*.md as needed and compare each candidate finding against relevant exception entries.",
-    "Read only the exception files and entries needed to rule in or rule out a candidate finding; do not ignore the directory, but avoid loading unrelated exception content.",
+    "Before writing audit/report.md, inspect the mirrored exception file for each candidate finding as needed; for src/auth.ts, inspect audit/exceptions/src/auth.md.",
+    "Read only the mirrored exception files and entries needed to rule in or rule out a candidate finding; do not ignore the directory, but avoid loading unrelated exception content.",
+    "Exception entries use **Line:** only because the mirrored exception file path identifies the source file.",
     "Do not write findings that are already covered by an existing exception unless the exception is clearly stale because the code has materially changed.",
     "If an exception still applies, suppress that finding instead of re-reporting it.",
   ].join(" ");
@@ -327,13 +341,9 @@ export function buildAuditPromptWithExceptions(auditPrompt: string): string {
     return `${auditPrompt}\n\n${instructions}`;
   }
 
-  const mdFiles = readdirSync(AUDIT_EXCEPTIONS_DIR)
-    .filter((f) => f.endsWith(".md"))
-    .sort();
+  const mdFiles = listExceptionMarkdownFiles();
   const exceptionFileList =
-    mdFiles.length > 0
-      ? mdFiles.map((file) => join(AUDIT_EXCEPTIONS_DIR, file)).join("\n")
-      : `${AUDIT_EXCEPTIONS_DIR}/*.md`;
+    mdFiles.length > 0 ? mdFiles.join("\n") : `${AUDIT_EXCEPTIONS_DIR}/**/*.md`;
 
   return `${auditPrompt}\n\n${instructions}\n\nKnown exception files:\n${exceptionFileList}`;
 }

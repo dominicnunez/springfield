@@ -290,7 +290,7 @@ Willie resolves the audit prompt in this order:
 
 Each iteration runs three steps:
 
-1. **Audit** — Opus scans the codebase using the audit prompt, may consult `audit/exceptions/*.md` selectively, and SFK filters any still-matching exceptions out of `audit/report.md` before validation
+1. **Audit** — Opus scans the codebase using the audit prompt, may consult mirrored files under `audit/exceptions/` selectively, and SFK filters any still-matching exceptions out of `audit/report.md` before validation
 2. **Validate** — Opus reads the actual code at each finding and removes only true false positives or correct-by-design findings from the report
 3. **Fix** — Opus applies proper long-term fixes, commits each one, and uses `audit/exceptions/` only for genuine misreads, design decisions, or non-remediable risks
 
@@ -304,7 +304,17 @@ All audit artifacts live in the `audit/` directory:
 |------|-------------|
 | `audit/prompt.md` | Custom audit instructions (optional) |
 | `audit/report.md` | Generated findings |
-| `audit/exceptions/` | True exceptions only: `misreads.md`, `design.md`, and `risks.md` for upstream/design/architecture constraints |
+| `audit/exceptions/` | True exceptions only, stored in mirrored source paths such as `audit/exceptions/src/auth.md` for `src/auth.ts` |
+
+Exception entries identify only the source line because the exception file path mirrors the source file:
+
+```md
+### Plain language description
+
+**Line:** `42` — optional context
+
+**Reason:** Explanation (can be multiple lines)
+```
 
 ## Legacy Config Migration
 

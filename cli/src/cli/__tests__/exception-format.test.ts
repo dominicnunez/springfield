@@ -1,46 +1,30 @@
 import { describe, expect, test } from "bun:test";
 import {
   EXCEPTION_ENTRY_EXAMPLE,
-  EXCEPTION_FILE_DESCRIPTIONS,
-  EXCEPTION_FILE_TEMPLATES,
+  EXCEPTION_FALSE_POSITIVE_EXAMPLE,
+  EXCEPTION_REASON_EXAMPLE,
 } from "../exception-format.js";
 
 describe("exception format", () => {
-  test("uses the canonical no-date entry format", () => {
+  test("uses the canonical line-only entry format", () => {
     expect(EXCEPTION_ENTRY_EXAMPLE).toBe(
       [
         "### Plain language description",
         "",
-        "**Location:** `file/path:line` — optional context",
+        "**Line:** `line` — optional context",
         "",
         "**Reason:** Explanation (can be multiple lines)",
       ].join("\n"),
     );
     expect(EXCEPTION_ENTRY_EXAMPLE).not.toContain("**Date:**");
+    expect(EXCEPTION_ENTRY_EXAMPLE).not.toContain("**Location:**");
+    expect(EXCEPTION_ENTRY_EXAMPLE).not.toContain("file/path");
   });
 
-  test("all exception templates share the same entry format block", () => {
-    for (const template of Object.values(EXCEPTION_FILE_TEMPLATES)) {
-      expect(template).toContain("> Entry format:");
-      expect(template).toContain(
-        "> **Location:** `file/path:line` — optional context",
-      );
-      expect(template).toContain(
-        "> **Reason:** Explanation (can be multiple lines)",
-      );
-      expect(template).not.toContain("**Date:**");
-    }
-  });
-
-  test("exports canonical exception file descriptions", () => {
-    expect(EXCEPTION_FILE_DESCRIPTIONS["risks.md"]).toContain(
-      "not reasonably remediable in this repo",
-    );
-    expect(EXCEPTION_FILE_DESCRIPTIONS["misreads.md"]).toContain(
-      "factually wrong",
-    );
-    expect(EXCEPTION_FILE_DESCRIPTIONS["design.md"]).toContain(
-      "correct by design",
-    );
+  test("exception examples use line-only entries", () => {
+    expect(EXCEPTION_FALSE_POSITIVE_EXAMPLE).toContain("**Line:** `line`");
+    expect(EXCEPTION_REASON_EXAMPLE).toContain("**Line:** `line`");
+    expect(EXCEPTION_FALSE_POSITIVE_EXAMPLE).not.toContain("**Location:**");
+    expect(EXCEPTION_REASON_EXAMPLE).not.toContain("**Location:**");
   });
 });

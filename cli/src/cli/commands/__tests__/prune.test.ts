@@ -15,109 +15,93 @@ import {
 // ─────────────────────────────────────────────────────────────
 
 describe("parseExceptionFile", () => {
-  test("extracts heading, location from well-formed entries", () => {
+  test("extracts heading and line from well-formed entries", () => {
     const content = [
-      "# Risks",
+      "# Retry exceptions",
       "",
       "> Some header text",
       "",
       "### Hardcoded timeout in retry loop",
       "",
-      "**Location:** `src/retry.ts:42` — retry handler",
+      "**Line:** `42` — retry handler",
       "",
       "**Reason:** Timeout is intentional for rate limiting.",
     ].join("\n");
 
-    const result = parseExceptionFile("audit/exceptions/risks.md", content);
+    const result = parseExceptionFile("audit/exceptions/src/retry.md", content);
 
-    expect(result.path).toBe("audit/exceptions/risks.md");
+    expect(result.path).toBe("audit/exceptions/src/retry.md");
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0].heading).toBe("Hardcoded timeout in retry loop");
-    expect(result.entries[0].location).toBe("src/retry.ts");
+    expect(result.entries[0].line).toBe(42);
   });
 
-  test("handles entries without Location field", () => {
+  test("handles entries without Line field", () => {
     const content = [
-      "# Misreads",
+      "# Architecture exceptions",
       "",
       "### General architecture concern",
       "",
       "**Reason:** This is a design choice.",
     ].join("\n");
 
-    const result = parseExceptionFile("audit/exceptions/misreads.md", content);
+    const result = parseExceptionFile("audit/exceptions/src/core.md", content);
 
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0].heading).toBe("General architecture concern");
-    expect(result.entries[0].location).toBeUndefined();
+    expect(result.entries[0].line).toBeUndefined();
   });
 
   test("handles multi-line Reason fields", () => {
     const content = [
-      "# Design",
+      "# Core exceptions",
       "",
       "### Complex design choice",
       "",
-      "**Location:** `lib/core.ts:10`",
+      "**Line:** `10`",
       "",
       "**Reason:** First line of reason.",
       "Second line continues the explanation.",
       "Third line wraps up.",
     ].join("\n");
 
-    const result = parseExceptionFile("audit/exceptions/design.md", content);
+    const result = parseExceptionFile("audit/exceptions/lib/core.md", content);
 
     expect(result.entries).toHaveLength(1);
+    expect(result.entries[0].line).toBe(10);
     expect(result.entries[0].rawText).toContain("Second line continues");
     expect(result.entries[0].rawText).toContain("Third line wraps up.");
   });
 
-  test("tolerates older entries that still include a Date field", () => {
-    const content = [
-      "# Risks",
-      "",
-      "### Legacy entry",
-      "",
-      "**Location:** `src/legacy.ts:12`",
-      "**Date:** 2025-01-15",
-      "",
-      "**Reason:** Legacy format remains parseable.",
-    ].join("\n");
-
-    const result = parseExceptionFile("audit/exceptions/risks.md", content);
-
-    expect(result.entries).toHaveLength(1);
-    expect(result.entries[0].heading).toBe("Legacy entry");
-    expect(result.entries[0].location).toBe("src/legacy.ts");
-    expect(result.entries[0].rawText).toContain("**Date:** 2025-01-15");
-  });
-
   test("parses multiple entries from one file", () => {
     const content = [
-      "# Risks",
+      "# Multiple exceptions",
       "",
       "### Entry one",
       "",
-      "**Location:** `a.ts:1`",
+      "**Line:** `1`",
       "",
       "### Entry two",
       "",
-      "**Location:** `b.ts:2`",
+      "**Line:** `2`",
       "",
       "### Entry three",
       "",
-      "**Reason:** No location here.",
+      "**Reason:** No line here.",
     ].join("\n");
 
-    const result = parseExceptionFile("risks.md", content);
+    const result = parseExceptionFile(
+      "audit/exceptions/src/multiple.md",
+      content,
+    );
 
     expect(result.entries).toHaveLength(3);
     expect(result.entries[0].heading).toBe("Entry one");
-    expect(result.entries[0].location).toBe("a.ts");
+    expect(result.entries[0].line).toBe(1);
     expect(result.entries[1].heading).toBe("Entry two");
-    expect(result.entries[1].location).toBe("b.ts");
+    expect(result.entries[1].line).toBe(2);
     expect(result.entries[2].heading).toBe("Entry three");
-    expect(result.entries[2].location).toBeUndefined();
+    expect(result.entries[2].line).toBeUndefined();
   });
 
   test("preserves header content before first entry", () => {
@@ -132,7 +116,7 @@ describe("parseExceptionFile", () => {
       "**Reason:** something",
     ].join("\n");
 
-    const result = parseExceptionFile("risks.md", content);
+    const result = parseExceptionFile("audit/exceptions/src/first.md", content);
 
     expect(result.header).toContain("# Risks");
     expect(result.header).toContain("> Some blockquote header");
@@ -142,7 +126,7 @@ describe("parseExceptionFile", () => {
   test("treats entire content as header when no entries exist", () => {
     const content = ["# Empty File", "", "> Template header only"].join("\n");
 
-    const result = parseExceptionFile("empty.md", content);
+    const result = parseExceptionFile("audit/exceptions/src/empty.md", content);
 
     expect(result.entries).toHaveLength(0);
     expect(result.header).toBe(content);
@@ -150,10 +134,10 @@ describe("parseExceptionFile", () => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// Deterministic file-existence check (integration via prune flow)
+// Line-only mirrored entries
 // ─────────────────────────────────────────────────────────────
 
-describe("deterministic file-existence check", () => {
+describe("line-only mirrored entries", () => {
   let originalCwd: string;
   let tempRoot: string;
 
@@ -170,44 +154,38 @@ describe("deterministic file-existence check", () => {
     rmSync(tempRoot, { recursive: true, force: true });
   });
 
-  test("entry with location pointing to existing file is not flagged", () => {
+  test("entry stores line while mirrored file path stores source identity", () => {
     mkdirSync(join(tempRoot, "src"), { recursive: true });
     writeFileSync(join(tempRoot, "src", "exists.ts"), "export const x = 1;");
 
     const content = [
-      "# Risks",
+      "# Existing source exceptions",
       "",
       "### Entry pointing to existing file",
       "",
-      "**Location:** `src/exists.ts:10`",
+      "**Line:** `10`",
       "**Reason:** Some reason.",
     ].join("\n");
 
-    const file = parseExceptionFile("risks.md", content);
-    // The entry's location is "src/exists.ts" — file exists
-    expect(file.entries[0].location).toBe("src/exists.ts");
+    const file = parseExceptionFile("audit/exceptions/src/exists.md", content);
 
-    // Verify the file exists from cwd
-    const { existsSync } = require("node:fs");
-    expect(existsSync("src/exists.ts")).toBe(true);
+    expect(file.path).toBe("audit/exceptions/src/exists.md");
+    expect(file.entries[0].line).toBe(10);
+    expect(file.entries[0].rawText).not.toContain("src/exists.ts");
   });
 
-  test("entry with location pointing to deleted file would be flagged", () => {
-    // Don't create the referenced file
+  test("entry without line remains parseable", () => {
     const content = [
-      "# Risks",
+      "# Deleted source exceptions",
       "",
-      "### Entry pointing to deleted file",
+      "### Entry without line",
       "",
-      "**Location:** `src/deleted.ts:5`",
       "**Reason:** Some reason.",
     ].join("\n");
 
-    const file = parseExceptionFile("risks.md", content);
-    expect(file.entries[0].location).toBe("src/deleted.ts");
+    const file = parseExceptionFile("audit/exceptions/src/deleted.md", content);
 
-    const { existsSync } = require("node:fs");
-    expect(existsSync("src/deleted.ts")).toBe(false);
+    expect(file.entries[0].line).toBeUndefined();
   });
 });
 
@@ -218,19 +196,18 @@ describe("deterministic file-existence check", () => {
 describe("rebuildFile", () => {
   test("removes stale entries while preserving header and remaining entries", () => {
     const file: ExceptionFile = {
-      path: "risks.md",
-      header: "# Risks\n\n> Header text",
+      path: "audit/exceptions/src/rebuild.md",
+      header: "# Rebuild exceptions\n\n> Header text",
       entries: [
         {
           heading: "Keep this",
-          location: "a.ts",
-          rawText: "### Keep this\n\n**Location:** `a.ts:1`\n**Reason:** Good",
+          line: 1,
+          rawText: "### Keep this\n\n**Line:** `1`\n**Reason:** Good",
         },
         {
           heading: "Remove this",
-          location: "b.ts",
-          rawText:
-            "### Remove this\n\n**Location:** `b.ts:2`\n**Reason:** Stale",
+          line: 2,
+          rawText: "### Remove this\n\n**Line:** `2`\n**Reason:** Stale",
         },
         {
           heading: "Also keep",
@@ -240,12 +217,12 @@ describe("rebuildFile", () => {
     };
 
     const toRemove = new Set([
-      "### Remove this\n\n**Location:** `b.ts:2`\n**Reason:** Stale",
+      "### Remove this\n\n**Line:** `2`\n**Reason:** Stale",
     ]);
 
     const result = rebuildFile(file, toRemove);
 
-    expect(result).toContain("# Risks");
+    expect(result).toContain("# Rebuild exceptions");
     expect(result).toContain("> Header text");
     expect(result).toContain("### Keep this");
     expect(result).toContain("### Also keep");
@@ -254,8 +231,8 @@ describe("rebuildFile", () => {
 
   test("preserves only header when all entries removed", () => {
     const file: ExceptionFile = {
-      path: "risks.md",
-      header: "# Risks\n\n> Header",
+      path: "audit/exceptions/src/rebuild.md",
+      header: "# Rebuild exceptions\n\n> Header",
       entries: [
         {
           heading: "Only entry",
@@ -267,7 +244,7 @@ describe("rebuildFile", () => {
     const toRemove = new Set(["### Only entry\n\n**Reason:** Gone"]);
     const result = rebuildFile(file, toRemove);
 
-    expect(result).toBe("# Risks\n\n> Header\n");
+    expect(result).toBe("# Rebuild exceptions\n\n> Header\n");
     expect(result).not.toContain("### Only entry");
   });
 });

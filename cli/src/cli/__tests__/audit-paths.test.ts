@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initLogger } from "../../ui/logger.js";
@@ -9,6 +15,9 @@ import {
   AUDIT_PROMPT_FILE,
   AUDIT_REPORT_FILE,
   ensureAuditDirectories,
+  exceptionFileForSourceFile,
+  listExceptionMarkdownFiles,
+  sourceCandidatesForExceptionFile,
 } from "../audit-paths.js";
 
 describe("audit paths", () => {
@@ -35,20 +44,44 @@ describe("audit paths", () => {
     expect(AUDIT_PROMPT_FILE).toBe(join("audit", "prompt.md"));
   });
 
-  test("bootstraps exception template files in the shared directory", () => {
+  test("bootstraps audit directories without category templates", () => {
     ensureAuditDirectories();
 
     expect(existsSync(AUDIT_DIR)).toBe(true);
     expect(existsSync(AUDIT_EXCEPTIONS_DIR)).toBe(true);
-    expect(existsSync(join(AUDIT_EXCEPTIONS_DIR, "misreads.md"))).toBe(true);
-    expect(existsSync(join(AUDIT_EXCEPTIONS_DIR, "risks.md"))).toBe(true);
-    expect(existsSync(join(AUDIT_EXCEPTIONS_DIR, "design.md"))).toBe(true);
+    expect(existsSync(join(AUDIT_EXCEPTIONS_DIR, "misreads.md"))).toBe(false);
+    expect(existsSync(join(AUDIT_EXCEPTIONS_DIR, "risks.md"))).toBe(false);
+    expect(existsSync(join(AUDIT_EXCEPTIONS_DIR, "design.md"))).toBe(false);
+  });
 
-    const risksTemplate = readFileSync(
-      join(AUDIT_EXCEPTIONS_DIR, "risks.md"),
-      "utf-8",
+  test("maps source files to mirrored markdown exception files", () => {
+    expect(exceptionFileForSourceFile("src/auth.ts")).toBe(
+      join(AUDIT_EXCEPTIONS_DIR, "src", "auth.md"),
     );
-    expect(risksTemplate).toContain("# Risks");
-    expect(risksTemplate).toContain("Managed by sfk willie.");
+    expect(exceptionFileForSourceFile("src/auth.test.ts")).toBe(
+      join(AUDIT_EXCEPTIONS_DIR, "src", "auth.test.md"),
+    );
+  });
+
+  test("lists exception markdown files recursively", () => {
+    mkdirSync(join(AUDIT_EXCEPTIONS_DIR, "src", "cli"), { recursive: true });
+    writeFileSync(join(AUDIT_EXCEPTIONS_DIR, "src", "api.md"), "# API");
+    writeFileSync(join(AUDIT_EXCEPTIONS_DIR, "src", "cli", "run.md"), "# Run");
+
+    expect(listExceptionMarkdownFiles()).toEqual([
+      join(AUDIT_EXCEPTIONS_DIR, "src", "api.md"),
+      join(AUDIT_EXCEPTIONS_DIR, "src", "cli", "run.md"),
+    ]);
+  });
+
+  test("resolves mirrored exception files to source candidates", () => {
+    mkdirSync("src", { recursive: true });
+    writeFileSync(join("src", "auth.ts"), "export const auth = true;");
+
+    expect(
+      sourceCandidatesForExceptionFile(
+        join(AUDIT_EXCEPTIONS_DIR, "src", "auth.md"),
+      ),
+    ).toEqual([join("src", "auth.ts")]);
   });
 });

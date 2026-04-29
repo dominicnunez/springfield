@@ -3,7 +3,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -79,7 +78,7 @@ describe("audit session", () => {
     rmSync(tempRoot, { recursive: true, force: true });
   });
 
-  test("prefers CLI audit prompt path and bootstraps exception templates", () => {
+  test("prefers CLI audit prompt path and bootstraps exception directory", () => {
     const cliPrompt = join(projectDir, "custom-audit.md");
     const projectPrompt = join(projectDir, "audit", "prompt.md");
     mkdirSync(join(projectDir, "audit"), { recursive: true });
@@ -96,15 +95,13 @@ describe("audit session", () => {
     expect(session).not.toBeNull();
     expect(session?.auditPrompt).toBe("cli prompt");
     expect(session?.auditPromptSource).toBe(cliPrompt);
+    expect(existsSync(join(projectDir, "audit", "exceptions"))).toBe(true);
     expect(
       existsSync(join(projectDir, "audit", "exceptions", "risks.md")),
-    ).toBe(true);
+    ).toBe(false);
     expect(
-      readFileSync(
-        join(projectDir, "audit", "exceptions", "design.md"),
-        "utf-8",
-      ),
-    ).toContain("Managed by sfk willie.");
+      existsSync(join(projectDir, "audit", "exceptions", "design.md")),
+    ).toBe(false);
   });
 
   test("detects lint and test commands during session initialization", () => {

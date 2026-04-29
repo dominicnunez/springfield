@@ -1,15 +1,18 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import pc from "picocolors";
 import type { Config } from "../../config/loader.js";
 import type { Engine } from "../../engines/base.js";
 import { logDebug, logError, logInfo, logSuccess } from "../../ui/logger.js";
-import { AUDIT_EXCEPTIONS_DIR } from "../audit-paths.js";
+import {
+  AUDIT_EXCEPTIONS_DIR,
+  listExceptionMarkdownFiles,
+  sourceCandidatesForExceptionFile,
+} from "../audit-paths.js";
 import { initializeWillieEngine } from "../engine-factory.js";
 
 export interface ExceptionEntry {
   heading: string;
-  location?: string;
+  line?: number;
   rawText: string;
 }
 
@@ -59,16 +62,16 @@ function buildEntry(
   const rawText = lines.slice(start, end).join("\n").replace(/\n+$/, "");
   const heading = lines[start].slice(4);
 
-  let location: string | undefined;
+  let line: number | undefined;
   for (let i = start + 1; i < end; i++) {
-    const match = lines[i].match(/^\*\*Location:\*\*\s*`([^`]+)`/);
+    const match = lines[i].match(/^\*\*Line:\*\*\s*`?(\d+)`?/);
     if (match) {
-      location = match[1].split(":")[0];
+      line = Number.parseInt(match[1], 10);
       break;
     }
   }
 
-  return { heading, location, rawText };
+  return { heading, line, rawText };
 }
 
 interface PruneResult {
@@ -76,46 +79,47 @@ interface PruneResult {
   reason: string;
 }
 
-function checkFileExistence(entries: ExceptionEntry[]): {
+function checkFileExistence(file: ExceptionFile): {
   stale: PruneResult[];
   surviving: ExceptionEntry[];
 } {
-  const stale: PruneResult[] = [];
-  const surviving: ExceptionEntry[] = [];
-
-  for (const entry of entries) {
-    if (entry.location && !existsSync(entry.location)) {
-      stale.push({
-        entry,
-        reason: `referenced file '${entry.location}' no longer exists`,
-      });
-    } else {
-      surviving.push(entry);
-    }
+  const sourceCandidates = sourceCandidatesForExceptionFile(file.path);
+  if (sourceCandidates.length > 0) {
+    return { stale: [], surviving: file.entries };
   }
 
-  return { stale, surviving };
+  return {
+    stale: file.entries.map((entry) => ({
+      entry,
+      reason: `mirrored source file for '${file.path}' no longer exists`,
+    })),
+    surviving: [],
+  };
 }
 
-function buildCodeContext(entries: ExceptionEntry[]): string {
+function buildCodeContext(
+  file: ExceptionFile,
+  entries: ExceptionEntry[],
+): string {
+  const sourceCandidates = sourceCandidatesForExceptionFile(file.path);
+  if (sourceCandidates.length !== 1) return "";
+
+  const sourceFile = sourceCandidates[0];
   const parts: string[] = [];
 
   for (const entry of entries) {
-    if (!entry.location || !existsSync(entry.location)) continue;
+    if (!entry.line || !existsSync(sourceFile)) continue;
 
     try {
-      const content = readFileSync(entry.location, "utf-8");
+      const content = readFileSync(sourceFile, "utf-8");
       const lines = content.split("\n");
-      const lineMatch = entry.rawText.match(
-        /\*\*Location:\*\*\s*`[^`]+:(\d+)`/,
-      );
-      const targetLine = lineMatch ? parseInt(lineMatch[1], 10) - 1 : 0;
+      const targetLine = entry.line - 1;
 
       const start = Math.max(0, targetLine - CONTEXT_LINES);
       const end = Math.min(lines.length, targetLine + CONTEXT_LINES);
       const snippet = lines.slice(start, end).join("\n");
 
-      parts.push(`--- ${entry.location}:${start + 1}-${end} ---\n${snippet}\n`);
+      parts.push(`--- ${sourceFile}:${start + 1}-${end} ---\n${snippet}\n`);
     } catch {}
   }
 
@@ -139,7 +143,7 @@ File: ${file.path}
 Exception entries:
 ${entryList}
 
-Code context around referenced locations:
+Code context around referenced lines:
 ${codeContext || "(no code context available)"}
 
 Respond with ONLY a JSON array of indices (0-based) of entries that are stale. If none are stale, respond with [].
@@ -156,7 +160,7 @@ async function aiReview(
 ): Promise<PruneResult[]> {
   if (entries.length === 0) return [];
 
-  const codeContext = buildCodeContext(entries);
+  const codeContext = buildCodeContext(file, entries);
   const prompt = buildAiPrompt(file, entries, codeContext);
 
   logDebug(`AI reviewing ${entries.length} entries in ${file.path}`);
@@ -221,9 +225,7 @@ export async function pruneExceptions(
     return;
   }
 
-  const mdFiles = readdirSync(AUDIT_EXCEPTIONS_DIR)
-    .filter((f) => f.endsWith(".md"))
-    .sort();
+  const mdFiles = listExceptionMarkdownFiles();
 
   if (mdFiles.length === 0) {
     logInfo("No exception files found.");
@@ -231,9 +233,8 @@ export async function pruneExceptions(
   }
 
   const files: ExceptionFile[] = mdFiles.map((f) => {
-    const filePath = join(AUDIT_EXCEPTIONS_DIR, f);
-    const content = readFileSync(filePath, "utf-8");
-    return parseExceptionFile(filePath, content);
+    const content = readFileSync(f, "utf-8");
+    return parseExceptionFile(f, content);
   });
 
   const totalEntries = files.reduce((sum, f) => sum + f.entries.length, 0);
@@ -253,7 +254,7 @@ export async function pruneExceptions(
   const phase1Survivors = new Map<string, ExceptionEntry[]>();
 
   for (const file of files) {
-    const { stale, surviving } = checkFileExistence(file.entries);
+    const { stale, surviving } = checkFileExistence(file);
     allStale.push(...stale);
     phase1Survivors.set(file.path, surviving);
   }

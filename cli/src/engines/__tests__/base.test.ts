@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { EXCEPTION_FILE_DESCRIPTIONS } from "../../cli/exception-format.js";
 import {
   DEFAULT_AUDIT_PROMPT,
   generateFixPrompt,
@@ -10,10 +9,13 @@ import {
 describe("Willie audit prompts", () => {
   test("audit prompt checks exceptions before writing the report", () => {
     expect(DEFAULT_AUDIT_PROMPT).toContain(
-      "Before writing audit/report.md, inspect audit/exceptions/*.md as needed and compare each candidate finding against relevant exception entries.",
+      "Before writing audit/report.md, inspect the mirrored exception file for each candidate finding as needed",
     );
     expect(DEFAULT_AUDIT_PROMPT).toContain(
       "Read only the exception files and entries needed to rule in or rule out that finding.",
+    );
+    expect(DEFAULT_AUDIT_PROMPT).toContain(
+      "Exception entries use **Line:** only because the mirrored exception file path identifies the source file.",
     );
     expect(DEFAULT_AUDIT_PROMPT).toContain(
       "Do not re-report findings that are already covered by a still-applicable exception.",
@@ -42,17 +44,15 @@ describe("Willie audit prompts", () => {
       "If you can describe concrete code, test, config, or doc changes in this repo that would remediate the finding, do the fix instead of writing an exception",
     );
     expect(prompt).toContain(
-      "Missing or weak tests, dead code, misleading comments, local config cleanup, validation gaps, and other repo-controlled maintenance work do NOT belong in risks.md",
+      "Missing or weak tests, dead code, misleading comments, local config cleanup, validation gaps, and other repo-controlled maintenance work do NOT belong in exceptions",
     );
     expect(prompt).toContain(
-      `risks.md — ${EXCEPTION_FILE_DESCRIPTIONS["risks.md"]}`,
+      "append to the mirrored exception file for the reported source file",
     );
-    expect(prompt).toContain(
-      `misreads.md — ${EXCEPTION_FILE_DESCRIPTIONS["misreads.md"]}`,
-    );
-    expect(prompt).toContain(
-      `design.md — ${EXCEPTION_FILE_DESCRIPTIONS["design.md"]}`,
-    );
+    expect(prompt).toContain("src/auth.ts -> audit/exceptions/src/auth.md");
+    expect(prompt).not.toContain("risks.md");
+    expect(prompt).not.toContain("misreads.md");
+    expect(prompt).not.toContain("design.md");
   });
 
   test("ralph prompt defines plain prose conventional commit bodies", () => {

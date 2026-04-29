@@ -1,6 +1,5 @@
 import {
   EXCEPTION_FALSE_POSITIVE_EXAMPLE,
-  EXCEPTION_FILE_DESCRIPTIONS,
   EXCEPTION_REASON_EXAMPLE,
 } from "../cli/exception-format.js";
 
@@ -27,11 +26,8 @@ export interface Engine {
 export const COMPLETE_MARKER = "<promise>COMPLETE</promise>";
 
 const FIX_TESTS_PROMPT_MAX_LINES = 100;
-const EXCEPTION_FILE_GUIDANCE = [
-  `   - risks.md — ${EXCEPTION_FILE_DESCRIPTIONS["risks.md"]}`,
-  `   - misreads.md — ${EXCEPTION_FILE_DESCRIPTIONS["misreads.md"]}`,
-  `   - design.md — ${EXCEPTION_FILE_DESCRIPTIONS["design.md"]}`,
-].join("\n");
+const MIRRORED_EXCEPTION_FILE_EXAMPLE =
+  "src/auth.ts -> audit/exceptions/src/auth.md";
 
 const COMMIT_STANDARD = `## Commit Message Standard
 
@@ -343,7 +339,7 @@ The format is critical: "### [Category]" with brackets, then severity/file/detai
    - Cruft tests that test implementation details instead of behavior (mocking internals, asserting on log output, snapshot tests of serialization formats)
    - Tests that pass but verify nothing meaningful (empty assertions, tautologies, verbatim duplicates of other tests)
    - Stale tests that reference removed or renamed code
-7. Before writing audit/report.md, inspect audit/exceptions/*.md as needed and compare each candidate finding against relevant exception entries. Read only the exception files and entries needed to rule in or rule out that finding. Do not re-report findings that are already covered by a still-applicable exception.`;
+7. Before writing audit/report.md, inspect the mirrored exception file for each candidate finding as needed (${MIRRORED_EXCEPTION_FILE_EXAMPLE}). Read only the exception files and entries needed to rule in or rule out that finding. Exception entries use **Line:** only because the mirrored exception file path identifies the source file. Do not re-report findings that are already covered by a still-applicable exception.`;
 
 export const VALIDATE_PROMPT = `Review and validate or invalidate each item in audit/report.md. Be thorough — actually read the code at every referenced file:line. Do not just trust the audit description.
 
@@ -352,12 +348,13 @@ Rules:
 2. Determine if the finding is FACTUALLY WRONG (false positive) or REAL
 3. A finding is a false positive ONLY if the audit misread the code, missed existing handling, or described behavior that doesn't actually occur
 4. A finding that is real but "minor", "broad", "low priority", "easy to fix", or "not worth this session" is NOT a false positive — keep it in the report
-5. Move only genuine false positives to audit/exceptions/misreads.md using this exact format:
+5. Move only genuine false positives to the mirrored exception file for the reported source file (${MIRRORED_EXCEPTION_FILE_EXAMPLE}) using this exact format:
 
 \`\`\`
 ${EXCEPTION_FALSE_POSITIVE_EXAMPLE}
 \`\`\`
 
+   Create parent directories as needed. The exception file path identifies the source file; include only the line number in the entry.
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
 6. If a finding describes a repo-controlled problem with a concrete remediation path in this codebase, it remains a real finding for the fix step unless it is factually wrong or correct by design
 7. For testing findings (missing coverage, cruft tests), verify the claim by reading the test files — confirm the gap actually exists or the test actually has the described problem. Weak or source-oriented tests are still real findings when the claimed weakness exists. Do not rubber-stamp testing findings.
@@ -386,7 +383,7 @@ export function generateFixPrompt(options: FixPromptOptions): string {
     verifyInstructions = `7. No lint or test command detected — skip verification. If you know how to run them for this project, do so manually.`;
   }
 
-  return `Fix the issues in audit/report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to audit/exceptions/.
+  return `Fix the issues in audit/report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to mirrored files under audit/exceptions/.
 
 Rules:
 1. Do proper long-term fixes, not quick-fix bandaids
@@ -397,20 +394,14 @@ Rules:
    - The finding is about external constraints you cannot change (transitive deps, upstream bugs)
    - "Disproportionate for this session" alone is NOT enough
    - If you can describe concrete code, test, config, or doc changes in this repo that would remediate the finding, do the fix instead of writing an exception
-   - Missing or weak tests, dead code, misleading comments, local config cleanup, validation gaps, and other repo-controlled maintenance work do NOT belong in risks.md
-4. When adding to exceptions, append to the correct file using this format:
+    - Missing or weak tests, dead code, misleading comments, local config cleanup, validation gaps, and other repo-controlled maintenance work do NOT belong in exceptions
+ 4. When adding to exceptions, append to the mirrored exception file for the reported source file (${MIRRORED_EXCEPTION_FILE_EXAMPLE}) using this format:
 
 \`\`\`
 ${EXCEPTION_REASON_EXAMPLE}
 \`\`\`
 
-   Files in audit/exceptions/:
-${EXCEPTION_FILE_GUIDANCE}
-   Agents can create additional domain-specific files in the directory.
-   If any exceptions file exceeds ~80 entries, split it into domain-specific files
-   (e.g. risks.md → risks-auth.md + risks-deps.md). Move entries — don't duplicate.
-   Keep the original file header in each new file. The directory is scanned dynamically,
-   so any .md filename works.
+   Create parent directories as needed. The exception file path identifies the source file; include only the line number in each entry.
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
 5. Commit each fix following the commit standard below.
 6. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
