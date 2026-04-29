@@ -12,7 +12,7 @@ async function main(): Promise<void> {
     const { command, options, auditOptions, pruneOptions } = parseArgs(
       process.argv,
     );
-    const config = loadConfig();
+    const config = loadConfig(command);
     const finalConfig = mergeOptions(config, options);
 
     if (command === "prune") {

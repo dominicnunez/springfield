@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Config } from "../loader.js";
 import {
   applyConfigToConfig,
+  completeConfig,
   getCurrentModel,
   getGlobalConfigPath,
   getRalphEffort,
@@ -354,6 +355,77 @@ progress-dir = /tmp/progress
       const config = baseConfig();
       applyConfigToConfig(config, { "models.opencode-fallback": "  " });
       expect(config.ocFallModel).toBeUndefined();
+    });
+  });
+
+  describe("completeConfig", () => {
+    const auditBase = {
+      engine: "codex" as const,
+      claudeEffort: "high" as const,
+      codexModel: "gpt-5.5",
+      softLimitRetries: 3,
+      softLimitWait: 30,
+      willieMaxIterations: 0,
+      williePushAfterFix: true,
+    };
+
+    test("requires only the selected engine model for codex audit config", () => {
+      const config = completeConfig({ ...auditBase }, [], "audit");
+
+      expect(config.engine).toBe("codex");
+      expect(config.codexModel).toBe("gpt-5.5");
+      expect(config.claudeModel).toBe("");
+      expect(config.ocPrimeModel).toBe("");
+      expect(config.maxIterations).toBe(10);
+      expect(config.willieMaxIterations).toBe(0);
+    });
+
+    test("requires only the selected engine model for claude audit config", () => {
+      const config = completeConfig(
+        {
+          ...auditBase,
+          engine: "claude",
+          claudeModel: "sonnet",
+          codexModel: undefined,
+        },
+        [],
+        "audit",
+      );
+
+      expect(config.engine).toBe("claude");
+      expect(config.claudeModel).toBe("sonnet");
+      expect(config.codexModel).toBeUndefined();
+      expect(config.ocPrimeModel).toBe("");
+    });
+
+    test("requires only the selected engine model for opencode audit config", () => {
+      const config = completeConfig(
+        {
+          ...auditBase,
+          engine: "opencode",
+          codexModel: undefined,
+          ocPrimeModel: "big-pickle",
+        },
+        [],
+        "audit",
+      );
+
+      expect(config.engine).toBe("opencode");
+      expect(config.claudeModel).toBe("");
+      expect(config.codexModel).toBeUndefined();
+      expect(config.ocPrimeModel).toBe("big-pickle");
+    });
+
+    test("still rejects a missing model for the selected engine", () => {
+      expect(() =>
+        completeConfig({ ...auditBase, codexModel: undefined }, [], "audit"),
+      ).toThrow("models.codex is required.");
+    });
+
+    test("run config still requires ralph settings", () => {
+      expect(() => completeConfig({ ...auditBase }, [], "run")).toThrow(
+        "ralph.max-iterations is required.",
+      );
     });
   });
 

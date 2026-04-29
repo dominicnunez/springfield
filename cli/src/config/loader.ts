@@ -5,6 +5,12 @@ import { logWarning } from "../ui/logger.js";
 
 export type EngineType = "opencode" | "claude" | "codex";
 export type EffortLevel = "high" | "medium" | "low" | "xhigh";
+export type ConfigRequirementMode = "run" | "audit" | "prune";
+
+const DEFAULT_RALPH_MAX_ITERATIONS = 10;
+const DEFAULT_RALPH_SLEEP_SECONDS = 2;
+const DEFAULT_RALPH_MAX_CONSECUTIVE_FAILURES = 3;
+const DEFAULT_WILLIE_MAX_ITERATIONS = 0;
 
 export const SFK_HOME_DIR = join(homedir(), ".sfk");
 export const SFK_CONFIG_FILE = join(SFK_HOME_DIR, "config");
@@ -474,28 +480,33 @@ function buildConfigErrorMessage(issues: string[]): string {
   ].join("\n");
 }
 
-function completeConfig(config: Partial<Config>, issues: string[]): Config {
+export function completeConfig(
+  config: Partial<Config>,
+  issues: string[],
+  mode: ConfigRequirementMode = "run",
+): Config {
   const engine = requireConfigValue("engine.type", config.engine, issues);
-  const claudeModel = requireConfigValue(
-    "models.claude",
-    config.claudeModel,
-    issues,
-  );
   const claudeEffort = requireConfigValue(
     "models.effort",
     config.claudeEffort,
     issues,
   );
-  const codexModel = requireConfigValue(
-    "models.codex",
-    config.codexModel,
-    issues,
-  );
-  const ocPrimeModel = requireConfigValue(
-    "models.opencode-primary",
-    config.ocPrimeModel,
-    issues,
-  );
+  const claudeModel =
+    engine === "claude"
+      ? requireConfigValue("models.claude", config.claudeModel, issues)
+      : (config.claudeModel ?? "");
+  const codexModel =
+    engine === "codex"
+      ? requireConfigValue("models.codex", config.codexModel, issues)
+      : config.codexModel;
+  const ocPrimeModel =
+    engine === "opencode"
+      ? requireConfigValue(
+          "models.opencode-primary",
+          config.ocPrimeModel,
+          issues,
+        )
+      : (config.ocPrimeModel ?? "");
   const softLimitRetries = requireConfigValue(
     "rate-limits.soft-retries",
     config.softLimitRetries,
@@ -506,51 +517,67 @@ function completeConfig(config: Partial<Config>, issues: string[]): Config {
     config.softLimitWait,
     issues,
   );
-  const maxIterations = requireConfigValue(
-    "ralph.max-iterations",
-    config.maxIterations,
-    issues,
-  );
-  const sleepSeconds = requireConfigValue(
-    "ralph.sleep-seconds",
-    config.sleepSeconds,
-    issues,
-  );
-  const skipCommit = requireConfigValue(
-    "ralph.skip-commit",
-    config.skipCommit,
-    issues,
-  );
-  const pushAfterCommit = requireConfigValue(
-    "ralph.push-after-commit",
-    config.pushAfterCommit,
-    issues,
-  );
-  const skipTestVerify = requireConfigValue(
-    "ralph.skip-test-verify",
-    config.skipTestVerify,
-    issues,
-  );
-  const maxConsecutiveFailures = requireConfigValue(
-    "ralph.max-consecutive-failures",
-    config.maxConsecutiveFailures,
-    issues,
-  );
-  const auditAfterComplete = requireConfigValue(
-    "ralph.audit-after-complete",
-    config.auditAfterComplete,
-    issues,
-  );
-  const willieMaxIterations = requireConfigValue(
-    "willie.max-iterations",
-    config.willieMaxIterations,
-    issues,
-  );
-  const williePushAfterFix = requireConfigValue(
-    "willie.push-after-fix",
-    config.williePushAfterFix,
-    issues,
-  );
+  const maxIterations =
+    mode === "run"
+      ? requireConfigValue("ralph.max-iterations", config.maxIterations, issues)
+      : (config.maxIterations ?? DEFAULT_RALPH_MAX_ITERATIONS);
+  const sleepSeconds =
+    mode === "run"
+      ? requireConfigValue("ralph.sleep-seconds", config.sleepSeconds, issues)
+      : (config.sleepSeconds ?? DEFAULT_RALPH_SLEEP_SECONDS);
+  const skipCommit =
+    mode === "run"
+      ? requireConfigValue("ralph.skip-commit", config.skipCommit, issues)
+      : (config.skipCommit ?? false);
+  const pushAfterCommit =
+    mode === "run"
+      ? requireConfigValue(
+          "ralph.push-after-commit",
+          config.pushAfterCommit,
+          issues,
+        )
+      : (config.pushAfterCommit ?? false);
+  const skipTestVerify =
+    mode === "run"
+      ? requireConfigValue(
+          "ralph.skip-test-verify",
+          config.skipTestVerify,
+          issues,
+        )
+      : (config.skipTestVerify ?? false);
+  const maxConsecutiveFailures =
+    mode === "run"
+      ? requireConfigValue(
+          "ralph.max-consecutive-failures",
+          config.maxConsecutiveFailures,
+          issues,
+        )
+      : (config.maxConsecutiveFailures ??
+        DEFAULT_RALPH_MAX_CONSECUTIVE_FAILURES);
+  const auditAfterComplete =
+    mode === "run"
+      ? requireConfigValue(
+          "ralph.audit-after-complete",
+          config.auditAfterComplete,
+          issues,
+        )
+      : (config.auditAfterComplete ?? false);
+  const willieMaxIterations =
+    mode === "run" || mode === "audit"
+      ? requireConfigValue(
+          "willie.max-iterations",
+          config.willieMaxIterations,
+          issues,
+        )
+      : (config.willieMaxIterations ?? DEFAULT_WILLIE_MAX_ITERATIONS);
+  const williePushAfterFix =
+    mode === "run" || mode === "audit"
+      ? requireConfigValue(
+          "willie.push-after-fix",
+          config.williePushAfterFix,
+          issues,
+        )
+      : (config.williePushAfterFix ?? false);
 
   if (issues.length > 0) {
     throw new ConfigError(buildConfigErrorMessage(issues));
@@ -589,7 +616,7 @@ function completeConfig(config: Partial<Config>, issues: string[]): Config {
 /**
  * Load config from ~/.sfk/config. CLI arguments are merged separately.
  */
-export function loadConfig(): Config {
+export function loadConfig(mode: ConfigRequirementMode = "run"): Config {
   ensureGlobalConfig();
 
   try {
@@ -600,7 +627,7 @@ export function loadConfig(): Config {
     };
     const issues = applyConfigToConfig(config, parseConfigFile(content));
 
-    return completeConfig(config, issues);
+    return completeConfig(config, issues, mode);
   } catch (error) {
     if (error instanceof ConfigError) throw error;
 
@@ -648,7 +675,14 @@ export function getWillieEffort(config: Config): EffortLevel {
 type AgentName = "ralph" | "willie";
 
 function getEngineModel(config: Config): string {
-  if (config.engine === "claude") return config.claudeModel;
+  if (config.engine === "claude") {
+    if (!config.claudeModel.trim()) {
+      throw new ConfigError(
+        "models.claude is required when engine.type is claude.",
+      );
+    }
+    return config.claudeModel;
+  }
   if (config.engine === "codex") {
     if (!config.codexModel) {
       throw new ConfigError(
@@ -656,6 +690,11 @@ function getEngineModel(config: Config): string {
       );
     }
     return config.codexModel;
+  }
+  if (!config.ocPrimeModel.trim()) {
+    throw new ConfigError(
+      "models.opencode-primary is required when engine.type is opencode.",
+    );
   }
   return config.ocPrimeModel;
 }

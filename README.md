@@ -90,6 +90,7 @@ Created automatically on `npm install -g sfk` as a commented example. SFK exits 
 # type = opencode
 
 [models]
+# Only the selected engine model is required.
 # claude = sonnet
 # codex = gpt-5-codex
 # opencode-primary = big-pickle
@@ -107,7 +108,7 @@ Created automatically on `npm install -g sfk` as a commented example. SFK exits 
 
 ### Required Setup
 
-Edit `~/.sfk/config` and uncomment the values you want to use:
+Edit `~/.sfk/config` and uncomment the values you want to use. Only the model for the selected engine is required:
 
 ```bash
 mkdir -p ~/.sfk

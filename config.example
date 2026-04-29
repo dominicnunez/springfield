@@ -11,6 +11,7 @@
 # type = opencode
 
 [models]
+# Only the selected engine model is required.
 # claude = sonnet
 # codex = gpt-5-codex
 # opencode-primary = big-pickle
