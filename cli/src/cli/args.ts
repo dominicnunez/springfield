@@ -22,6 +22,7 @@ export interface CliOptions {
 }
 
 export interface AuditCliOptions {
+  sourcePath?: string;
   startStep?: AuditStep;
   maxIterations?: number;
   auditPrompt?: string;
@@ -150,6 +151,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   // Audit command
   addEngineOptions(program.command("audit"))
     .description("Run the willie audit loop")
+    .argument("[source-path]", "Source path to audit; subpaths are included")
     .option(
       "--step <step>",
       "Start from step: audit, validate, or fix",
@@ -163,26 +165,32 @@ export function parseArgs(argv: string[]): ParsedArgs {
     .option("--audit-prompt <path>", "Path to custom audit prompt file")
     .option("--lint-cmd <cmd>", "Custom lint command for fix step")
     .option("-v, --verbose", "Enable verbose output")
-    .action((opts: EngineOptionValues & OptionValues) => {
-      resolvedCommand = "audit";
+    .action(
+      (
+        sourcePath: string | undefined,
+        opts: EngineOptionValues & OptionValues,
+      ) => {
+        resolvedCommand = "audit";
 
-      const step = opts.step as AuditStep;
-      if (step && !["audit", "validate", "fix"].includes(step)) {
-        throw new Error(
-          `Invalid step: ${step}. Must be audit, validate, or fix.`,
-        );
-      }
+        const step = opts.step as AuditStep;
+        if (step && !["audit", "validate", "fix"].includes(step)) {
+          throw new Error(
+            `Invalid step: ${step}. Must be audit, validate, or fix.`,
+          );
+        }
 
-      Object.assign(auditCliOptions, {
-        startStep: step,
-        maxIterations: opts.maxIterations,
-        auditPrompt: opts.auditPrompt,
-        lintCmd: opts.lintCmd,
-        engine: resolveSelectedEngine(opts),
-        model: opts.model,
-        verbose: opts.verbose,
-      });
-    });
+        Object.assign(auditCliOptions, {
+          sourcePath,
+          startStep: step,
+          maxIterations: opts.maxIterations,
+          auditPrompt: opts.auditPrompt,
+          lintCmd: opts.lintCmd,
+          engine: resolveSelectedEngine(opts),
+          model: opts.model,
+          verbose: opts.verbose,
+        });
+      },
+    );
 
   program
     .command("prune")

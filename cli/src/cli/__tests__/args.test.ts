@@ -73,6 +73,18 @@ describe("parseArgs", () => {
     const { command, auditOptions } = parseArgs(["node", "sfk", "audit"]);
     expect(command).toBe("audit");
     expect(auditOptions.startStep).toBe("audit");
+    expect(auditOptions.sourcePath).toBeUndefined();
+  });
+
+  it("parses audit source path", () => {
+    const { command, auditOptions } = parseArgs([
+      "node",
+      "sfk",
+      "audit",
+      "cli/src",
+    ]);
+    expect(command).toBe("audit");
+    expect(auditOptions.sourcePath).toBe("cli/src");
   });
 
   it("parses audit command with step option", () => {
@@ -149,10 +161,12 @@ describe("parseArgs", () => {
       "node",
       "sfk",
       "audit",
+      "cli/src",
       "--max-iterations",
       "5",
     ]);
     expect(auditOptions.maxIterations).toBe(5);
+    expect(auditOptions.sourcePath).toBe("cli/src");
   });
 
   it("parses audit --codex shortcut as engine override", () => {

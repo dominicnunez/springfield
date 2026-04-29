@@ -312,10 +312,10 @@ After fixing and tests pass, check PRD.md:
 // Willie (audit) prompts
 // ─────────────────────────────────────────────────────────────
 
-export const DEFAULT_AUDIT_PROMPT = `Audit this codebase for security vulnerabilities, bugs, performance issues, and code quality problems.
+export const DEFAULT_AUDIT_PROMPT = `Audit the selected source scope for security vulnerabilities, bugs, performance issues, and code quality problems.
 
 Rules:
-1. Read the project entrypoints and follow imports to understand structure. Read test files to identify what is and isn't covered.
+1. Read entrypoints inside the selected source scope and follow in-scope imports to understand structure. Read in-scope test files to identify what is and isn't covered.
 2. Check for problems in these areas:
    - **Security:** injection flaws, auth issues, data exposure, missing input validation
    - **Correctness:** logic errors, race conditions, error handling gaps, missing error context at package boundaries

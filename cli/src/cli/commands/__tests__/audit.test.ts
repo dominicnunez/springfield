@@ -40,6 +40,12 @@ describe("audit step prompt building", () => {
 
     expect(prompt).toContain("base audit prompt");
     expect(prompt).toContain(
+      "No source path was provided. Before auditing, inspect only lightweight top-level project metadata and directory names to determine the smallest source-code path to audit.",
+    );
+    expect(prompt).toContain(
+      "Audit only that selected source-code path and its subpaths. Do not audit every repository path or file.",
+    );
+    expect(prompt).toContain(
       "Before writing audit/report.md, inspect the mirrored exception file for each candidate finding as needed; for src/auth.ts, inspect audit/exceptions/src/auth.md.",
     );
     expect(prompt).toContain(
@@ -64,6 +70,40 @@ describe("audit step prompt building", () => {
     );
     expect(prompt).not.toContain("Accepted rate limit tradeoff");
     expect(prompt).not.toContain("Current backoff is intentional.");
+  });
+
+  test("explicit source path constrains audit scope and listed exceptions", () => {
+    const exceptionsDir = join(projectDir, "audit", "exceptions");
+    mkdirSync(join(exceptionsDir, "src"), { recursive: true });
+    mkdirSync(join(exceptionsDir, "docs"), { recursive: true });
+    writeFileSync(join(exceptionsDir, "src", "auth.md"), "# Auth");
+    writeFileSync(join(exceptionsDir, "docs", "guide.md"), "# Docs");
+
+    const prompt = buildAuditPromptWithExceptions("base audit prompt", "src");
+
+    expect(prompt).toContain(
+      "Audit only `src` and, when it is a directory, its subpaths.",
+    );
+    expect(prompt).toContain("audit/exceptions/src/auth.md");
+    expect(prompt).not.toContain("audit/exceptions/docs/guide.md");
+  });
+
+  test("explicit source file lists only its mirrored exception file", () => {
+    const exceptionsDir = join(projectDir, "audit", "exceptions");
+    mkdirSync(join(exceptionsDir, "src"), { recursive: true });
+    writeFileSync(join(exceptionsDir, "src", "auth.md"), "# Auth");
+    writeFileSync(join(exceptionsDir, "src", "api.md"), "# API");
+
+    const prompt = buildAuditPromptWithExceptions(
+      "base audit prompt",
+      "src/auth.ts",
+    );
+
+    expect(prompt).toContain(
+      "Audit only `src/auth.ts` and, when it is a directory, its subpaths.",
+    );
+    expect(prompt).toContain("audit/exceptions/src/auth.md");
+    expect(prompt).not.toContain("audit/exceptions/src/api.md");
   });
 
   test("parseAuditReport parses multiple findings", () => {

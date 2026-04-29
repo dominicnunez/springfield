@@ -3,10 +3,11 @@ import {
   appendFileSync,
   existsSync,
   readFileSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { extname, join, sep } from "node:path";
 import pc from "picocolors";
 import type { Config } from "../../config/loader.js";
 import {
@@ -62,6 +63,7 @@ export interface ReportFilterResult {
 type PipelineSignal = "continue" | "stop" | "retry" | "abort";
 
 export interface AuditOptions {
+  sourcePath: string | undefined;
   startStep: AuditStep;
   maxIterations: number;
   auditPromptPath: string | undefined;
@@ -329,7 +331,79 @@ export function applyExceptionFilterToReport(): ReportFilterResult {
   };
 }
 
-export function buildAuditPromptWithExceptions(auditPrompt: string): string {
+function formatPromptPath(path: string): string {
+  return path.replace(/`/g, "\\`");
+}
+
+function normalizeSourcePath(sourcePath: string): string {
+  return sourcePath
+    .trim()
+    .replace(/^\.\/+/, "")
+    .replace(/\/+$/, "");
+}
+
+function sourcePathLooksLikeFile(sourcePath: string): boolean {
+  try {
+    return statSync(sourcePath).isFile();
+  } catch {
+    return extname(sourcePath) !== "";
+  }
+}
+
+function buildAuditScopeInstructions(sourcePath: string | undefined): string {
+  const normalized = sourcePath ? normalizeSourcePath(sourcePath) : "";
+  if (normalized) {
+    const promptPath = formatPromptPath(normalized);
+    return [
+      "Audit scope:",
+      `- Audit only \`${promptPath}\` and, when it is a directory, its subpaths.`,
+      `- Do not inspect, analyze, or report files outside \`${promptPath}\` except for mirrored exception files needed for findings inside that scope.`,
+      "- If the path does not exist, report that as the audit blocker instead of broadening the scope.",
+    ].join("\n");
+  }
+
+  return [
+    "Audit scope:",
+    "- No source path was provided. Before auditing, inspect only lightweight top-level project metadata and directory names to determine the smallest source-code path to audit.",
+    "- Audit only that selected source-code path and its subpaths. Do not audit every repository path or file.",
+    "- Exclude dependencies, build outputs, generated files, logs, documentation, examples, and audit artifacts unless they are inside the selected source-code path and are part of runtime source.",
+  ].join("\n");
+}
+
+function listExceptionMarkdownFilesForScope(
+  sourcePath: string | undefined,
+): string[] {
+  const files = listExceptionMarkdownFiles();
+  const normalized = sourcePath ? normalizeSourcePath(sourcePath) : "";
+  if (!normalized) return files;
+
+  if (sourcePathLooksLikeFile(normalized)) {
+    const exceptionFile = exceptionFileForSourceFile(normalized);
+    return files.filter((file) => file === exceptionFile);
+  }
+
+  const exceptionDir = join(AUDIT_EXCEPTIONS_DIR, normalized);
+  return files.filter((file) => file.startsWith(`${exceptionDir}${sep}`));
+}
+
+function exceptionMarkdownPatternForScope(
+  sourcePath: string | undefined,
+): string {
+  const normalized = sourcePath ? normalizeSourcePath(sourcePath) : "";
+  if (!normalized) return `${AUDIT_EXCEPTIONS_DIR}/**/*.md`;
+
+  if (sourcePathLooksLikeFile(normalized)) {
+    return exceptionFileForSourceFile(normalized);
+  }
+
+  return `${join(AUDIT_EXCEPTIONS_DIR, normalized)}/**/*.md`;
+}
+
+export function buildAuditPromptWithExceptions(
+  auditPrompt: string,
+  sourcePath?: string,
+): string {
+  const scopeInstructions = buildAuditScopeInstructions(sourcePath);
   const instructions = [
     "Before writing audit/report.md, inspect the mirrored exception file for each candidate finding as needed; for src/auth.ts, inspect audit/exceptions/src/auth.md.",
     "Read only the mirrored exception files and entries needed to rule in or rule out a candidate finding; do not ignore the directory, but avoid loading unrelated exception content.",
@@ -338,14 +412,16 @@ export function buildAuditPromptWithExceptions(auditPrompt: string): string {
     "If an exception still applies, suppress that finding instead of re-reporting it.",
   ].join(" ");
   if (!existsSync(AUDIT_EXCEPTIONS_DIR)) {
-    return `${auditPrompt}\n\n${instructions}`;
+    return `${auditPrompt}\n\n${scopeInstructions}\n\n${instructions}`;
   }
 
-  const mdFiles = listExceptionMarkdownFiles();
+  const mdFiles = listExceptionMarkdownFilesForScope(sourcePath);
   const exceptionFileList =
-    mdFiles.length > 0 ? mdFiles.join("\n") : `${AUDIT_EXCEPTIONS_DIR}/**/*.md`;
+    mdFiles.length > 0
+      ? mdFiles.join("\n")
+      : exceptionMarkdownPatternForScope(sourcePath);
 
-  return `${auditPrompt}\n\n${instructions}\n\nKnown exception files:\n${exceptionFileList}`;
+  return `${auditPrompt}\n\n${scopeInstructions}\n\n${instructions}\n\nKnown exception files:\n${exceptionFileList}`;
 }
 
 function logToFile(
@@ -377,12 +453,13 @@ function checkRateLimited(result: EngineResult): boolean {
 async function runAuditStep(
   engine: Engine,
   auditPrompt: string,
+  sourcePath: string | undefined,
   logDir: string,
   iter: number,
 ): Promise<AuditStepOutput> {
   logInfo("Step 1: Running audit...");
 
-  const prompt = buildAuditPromptWithExceptions(auditPrompt);
+  const prompt = buildAuditPromptWithExceptions(auditPrompt, sourcePath);
   const result = await engine.run(prompt);
   logToFile(logDir, iter, "audit", result.output);
 
@@ -551,6 +628,7 @@ async function runPipeline(
   steps: AuditStep[],
   engine: Engine,
   auditPrompt: string,
+  sourcePath: string | undefined,
   fixPrompt: string,
   logDir: string,
   iter: number,
@@ -563,7 +641,7 @@ async function runPipeline(
     switch (step) {
       case "audit": {
         const r = await withRateLimitRetry(
-          () => runAuditStep(engine, auditPrompt, logDir, iter),
+          () => runAuditStep(engine, auditPrompt, sourcePath, logDir, iter),
           (o) => o.result === "rate-limited",
           state,
           config,
@@ -627,11 +705,13 @@ export async function auditLoop(
 
   const maxStr =
     options.maxIterations > 0 ? String(options.maxIterations) : "unlimited";
+  const auditScope = options.sourcePath ?? "auto-detect source path";
 
   console.log("");
   console.log(pc.cyan(formatDivider("Willie Starting")));
   console.log(`Project: ${projectName}`);
   console.log(`Start step: ${options.startStep}`);
+  console.log(`Audit scope: ${auditScope}`);
   console.log(`Max iterations: ${maxStr}`);
   console.log(`Model: ${model} (effort: ${effort})`);
   console.log(`Audit prompt: ${auditPromptSource}`);
@@ -664,6 +744,7 @@ export async function auditLoop(
       steps,
       engine,
       auditPrompt,
+      options.sourcePath,
       fixPrompt,
       logDir,
       iter,

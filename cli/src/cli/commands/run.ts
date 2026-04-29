@@ -541,6 +541,7 @@ export async function runLoop(
         console.log(pc.cyan("  Starting willie audit loop..."));
         const { auditLoop } = await import("./audit.js");
         await auditLoop(config, {
+          sourcePath: undefined,
           startStep: "audit",
           maxIterations: config.willieMaxIterations,
           auditPromptPath: config.willieAuditPrompt,

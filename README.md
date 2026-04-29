@@ -296,10 +296,11 @@ Willie is Ralph's counterpart: Ralph builds, Willie audits. It runs a continuous
 ### Usage
 
 ```bash
-sfk audit                    # full loop, uses built-in audit prompt
+sfk audit                    # auto-detect source path, then audit that path
+sfk audit cli/src            # audit cli/src and its subpaths only
 sfk audit --max-iterations 3 # limit to 3 iterations
-sfk audit --start validate   # start from validate step
-sfk audit --start fix        # start from fix step
+sfk audit --step validate    # start from validate step
+sfk audit --step fix         # start from fix step
 ```
 
 ### Audit Prompt Resolution
@@ -315,7 +316,7 @@ Willie resolves the audit prompt in this order:
 
 Each iteration runs three steps:
 
-1. **Audit** — Opus scans the codebase using the audit prompt, may consult mirrored files under `audit/exceptions/` selectively, and SFK filters any still-matching exceptions out of `audit/report.md` before validation
+1. **Audit** — Opus scans the requested source path, or first identifies the source path when none is provided, may consult mirrored files under `audit/exceptions/` selectively, and SFK filters any still-matching exceptions out of `audit/report.md` before validation
 2. **Validate** — Opus reads the actual code at each finding and removes only true false positives or correct-by-design findings from the report
 3. **Fix** — Opus applies proper long-term fixes, commits each one, and uses `audit/exceptions/` only for genuine misreads, design decisions, or non-remediable risks
 

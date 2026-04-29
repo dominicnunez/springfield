@@ -26,6 +26,7 @@ async function main(): Promise<void> {
       const auditConfig = resolveAuditConfig(finalConfig, auditOptions);
 
       await auditLoop(auditConfig, {
+        sourcePath: auditOptions.sourcePath,
         startStep: auditOptions.startStep ?? "audit",
         maxIterations:
           auditOptions.maxIterations ?? auditConfig.willieMaxIterations,
