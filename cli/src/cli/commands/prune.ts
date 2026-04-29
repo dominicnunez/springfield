@@ -4,7 +4,7 @@ import type { Config } from "../../config/loader.js";
 import type { Engine } from "../../engines/base.js";
 import { logDebug, logError, logInfo, logSuccess } from "../../ui/logger.js";
 import {
-  AUDIT_EXCEPTIONS_DIR,
+  AUDIT_EXCEPTION_DIRS,
   listExceptionMarkdownFiles,
   sourceCandidatesForExceptionFile,
 } from "../audit-paths.js";
@@ -229,9 +229,9 @@ export async function pruneExceptions(
   config: Config,
   options: { verbose?: boolean },
 ): Promise<void> {
-  if (!existsSync(AUDIT_EXCEPTIONS_DIR)) {
+  if (!AUDIT_EXCEPTION_DIRS.some((dir) => existsSync(dir))) {
     logError(
-      `${AUDIT_EXCEPTIONS_DIR}/ not found. Run 'sfk audit' first to generate exception files.`,
+      "audit/design/, audit/misreads/, and audit/risks/ not found. Run 'sfk audit' first to generate exception files.",
     );
     process.exitCode = 1;
     return;

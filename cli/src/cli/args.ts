@@ -194,7 +194,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
   program
     .command("prune")
-    .description("Remove stale entries from audit/exceptions/ files")
+    .description("Remove stale entries from audit design/misreads/risks files")
     .option("-v, --verbose", "Enable verbose output")
     .action((opts) => {
       resolvedCommand = "prune";

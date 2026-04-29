@@ -29,9 +29,9 @@ describe("parseExceptionFile", () => {
       "**Reason:** Timeout is intentional for rate limiting.",
     ].join("\n");
 
-    const result = parseExceptionFile("audit/exceptions/src/retry.md", content);
+    const result = parseExceptionFile("audit/risks/src/retry.md", content);
 
-    expect(result.path).toBe("audit/exceptions/src/retry.md");
+    expect(result.path).toBe("audit/risks/src/retry.md");
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0].heading).toBe("Hardcoded timeout in retry loop");
     expect(result.entries[0].line).toBe(42);
@@ -46,7 +46,7 @@ describe("parseExceptionFile", () => {
       "**Reason:** This is a design choice.",
     ].join("\n");
 
-    const result = parseExceptionFile("audit/exceptions/src/core.md", content);
+    const result = parseExceptionFile("audit/design/src/core.md", content);
 
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0].heading).toBe("General architecture concern");
@@ -66,7 +66,7 @@ describe("parseExceptionFile", () => {
       "Third line wraps up.",
     ].join("\n");
 
-    const result = parseExceptionFile("audit/exceptions/lib/core.md", content);
+    const result = parseExceptionFile("audit/design/lib/core.md", content);
 
     expect(result.entries).toHaveLength(1);
     expect(result.entries[0].line).toBe(10);
@@ -92,7 +92,7 @@ describe("parseExceptionFile", () => {
     ].join("\n");
 
     const result = parseExceptionFile(
-      "audit/exceptions/src/multiple.md",
+      "audit/misreads/src/multiple.md",
       content,
     );
 
@@ -117,7 +117,7 @@ describe("parseExceptionFile", () => {
       "**Reason:** something",
     ].join("\n");
 
-    const result = parseExceptionFile("audit/exceptions/src/first.md", content);
+    const result = parseExceptionFile("audit/risks/src/first.md", content);
 
     expect(result.header).toContain("# Risks");
     expect(result.header).toContain("> Some blockquote header");
@@ -127,7 +127,7 @@ describe("parseExceptionFile", () => {
   test("treats entire content as header when no entries exist", () => {
     const content = ["# Empty File", "", "> Template header only"].join("\n");
 
-    const result = parseExceptionFile("audit/exceptions/src/empty.md", content);
+    const result = parseExceptionFile("audit/risks/src/empty.md", content);
 
     expect(result.entries).toHaveLength(0);
     expect(result.header).toBe(content);
@@ -168,9 +168,9 @@ describe("line-only mirrored entries", () => {
       "**Reason:** Some reason.",
     ].join("\n");
 
-    const file = parseExceptionFile("audit/exceptions/src/exists.md", content);
+    const file = parseExceptionFile("audit/risks/src/exists.md", content);
 
-    expect(file.path).toBe("audit/exceptions/src/exists.md");
+    expect(file.path).toBe("audit/risks/src/exists.md");
     expect(file.entries[0].line).toBe(10);
     expect(file.entries[0].rawText).not.toContain("src/exists.ts");
   });
@@ -184,7 +184,7 @@ describe("line-only mirrored entries", () => {
       "**Reason:** Some reason.",
     ].join("\n");
 
-    const file = parseExceptionFile("audit/exceptions/src/deleted.md", content);
+    const file = parseExceptionFile("audit/risks/src/deleted.md", content);
 
     expect(file.entries[0].line).toBeUndefined();
   });
@@ -194,7 +194,7 @@ describe("AI prune prompt", () => {
   test("marks exception entries and code context as untrusted data", () => {
     const prompt = buildAiPrompt(
       {
-        path: "audit/exceptions/src/auth.md",
+        path: "audit/misreads/src/auth.md",
         header: "# Auth",
         entries: [
           {
@@ -230,7 +230,7 @@ describe("AI prune prompt", () => {
 describe("rebuildFile", () => {
   test("removes stale entries while preserving header and remaining entries", () => {
     const file: ExceptionFile = {
-      path: "audit/exceptions/src/rebuild.md",
+      path: "audit/risks/src/rebuild.md",
       header: "# Rebuild exceptions\n\n> Header text",
       entries: [
         {
@@ -265,7 +265,7 @@ describe("rebuildFile", () => {
 
   test("preserves only header when all entries removed", () => {
     const file: ExceptionFile = {
-      path: "audit/exceptions/src/rebuild.md",
+      path: "audit/risks/src/rebuild.md",
       header: "# Rebuild exceptions\n\n> Header",
       entries: [
         {

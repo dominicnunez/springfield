@@ -4,8 +4,18 @@ import { logInfo } from "../ui/logger.js";
 
 export const AUDIT_DIR = "audit";
 export const AUDIT_REPORT_FILE = join(AUDIT_DIR, "report.md");
-export const AUDIT_EXCEPTIONS_DIR = join(AUDIT_DIR, "exceptions");
+export const AUDIT_DESIGN_DIR = join(AUDIT_DIR, "design");
+export const AUDIT_MISREADS_DIR = join(AUDIT_DIR, "misreads");
+export const AUDIT_RISKS_DIR = join(AUDIT_DIR, "risks");
 export const AUDIT_PROMPT_FILE = join(AUDIT_DIR, "prompt.md");
+
+export type AuditExceptionCategory = "design" | "misreads" | "risks";
+
+export const AUDIT_EXCEPTION_DIRS: readonly string[] = [
+  AUDIT_DESIGN_DIR,
+  AUDIT_MISREADS_DIR,
+  AUDIT_RISKS_DIR,
+];
 
 const MARKDOWN_EXTENSION = ".md";
 const PARENT_PATH_PREFIX = "..";
@@ -15,28 +25,48 @@ export function ensureAuditDirectories(): void {
     mkdirSync(AUDIT_DIR, { recursive: true });
   }
 
-  if (!existsSync(AUDIT_EXCEPTIONS_DIR)) {
-    mkdirSync(AUDIT_EXCEPTIONS_DIR, { recursive: true });
-    logInfo("Created audit/exceptions/");
+  for (const dir of AUDIT_EXCEPTION_DIRS) {
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+      logInfo(`Created ${dir}/`);
+    }
   }
 }
 
-export function exceptionFileForSourceFile(sourceFile: string): string {
+function exceptionDirForCategory(category: AuditExceptionCategory): string {
+  if (category === "design") return AUDIT_DESIGN_DIR;
+  if (category === "misreads") return AUDIT_MISREADS_DIR;
+  return AUDIT_RISKS_DIR;
+}
+
+export function exceptionFileForSourceFile(
+  sourceFile: string,
+  category: AuditExceptionCategory,
+): string {
   const extension = extname(sourceFile);
   const sourceWithoutExtension = extension
     ? sourceFile.slice(0, -extension.length)
     : sourceFile;
 
   return join(
-    AUDIT_EXCEPTIONS_DIR,
+    exceptionDirForCategory(category),
     `${sourceWithoutExtension}${MARKDOWN_EXTENSION}`,
   );
 }
 
-export function listExceptionMarkdownFiles(): string[] {
-  if (!existsSync(AUDIT_EXCEPTIONS_DIR)) return [];
+export function exceptionFilesForSourceFile(sourceFile: string): string[] {
+  return [
+    exceptionFileForSourceFile(sourceFile, "design"),
+    exceptionFileForSourceFile(sourceFile, "misreads"),
+    exceptionFileForSourceFile(sourceFile, "risks"),
+  ];
+}
 
-  return collectMarkdownFiles(AUDIT_EXCEPTIONS_DIR).sort();
+export function listExceptionMarkdownFiles(): string[] {
+  return AUDIT_EXCEPTION_DIRS.flatMap((dir) => {
+    if (!existsSync(dir)) return [];
+    return collectMarkdownFiles(dir);
+  }).sort();
 }
 
 function collectMarkdownFiles(dir: string): string[] {
@@ -55,13 +85,17 @@ function collectMarkdownFiles(dir: string): string[] {
 }
 
 function sourceStemForExceptionFile(exceptionFile: string): string | undefined {
-  const relativePath = relative(AUDIT_EXCEPTIONS_DIR, exceptionFile);
-  if (!relativePath || relativePath.startsWith(PARENT_PATH_PREFIX)) {
-    return undefined;
-  }
-  if (!relativePath.endsWith(MARKDOWN_EXTENSION)) return undefined;
+  for (const dir of AUDIT_EXCEPTION_DIRS) {
+    const relativePath = relative(dir, exceptionFile);
+    if (!relativePath || relativePath.startsWith(PARENT_PATH_PREFIX)) {
+      continue;
+    }
+    if (!relativePath.endsWith(MARKDOWN_EXTENSION)) continue;
 
-  return relativePath.slice(0, -MARKDOWN_EXTENSION.length);
+    return relativePath.slice(0, -MARKDOWN_EXTENSION.length);
+  }
+
+  return undefined;
 }
 
 export function sourceCandidatesForExceptionFile(

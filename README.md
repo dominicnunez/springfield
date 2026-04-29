@@ -318,9 +318,9 @@ Willie resolves the audit prompt in this order:
 
 Each iteration runs three steps:
 
-1. **Audit** — Opus scans the requested source path, or first identifies the source path when none is provided, may consult mirrored files under `audit/exceptions/` selectively, and SFK filters any still-matching exceptions out of `audit/report.md` before validation
+1. **Audit** — Opus scans the requested source path, or first identifies the source path when none is provided, may consult categorized mirrored files under `audit/design/`, `audit/misreads/`, and `audit/risks/` selectively, and SFK filters any still-matching exceptions out of `audit/report.md` before validation
 2. **Validate** — Opus reads the actual code at each finding and removes only true false positives or correct-by-design findings from the report
-3. **Fix** — Opus applies proper long-term fixes, commits each one, pushes only when `[willie] push-after-fix = true`, and uses `audit/exceptions/` only for genuine misreads, design decisions, or non-remediable risks
+3. **Fix** — Opus applies proper long-term fixes, commits each semantic group, pushes only when `[willie] push-after-fix = true`, and uses categorized mirrored files only for genuine misreads, design decisions, or non-remediable risks
 
 The loop exits when an audit produces zero findings.
 
@@ -332,9 +332,11 @@ All audit artifacts live in the `audit/` directory:
 |------|-------------|
 | `audit/prompt.md` | Custom audit instructions (optional) |
 | `audit/report.md` | Generated findings |
-| `audit/exceptions/` | True exceptions only, stored in mirrored source paths such as `audit/exceptions/src/auth.md` for `src/auth.ts` |
+| `audit/misreads/` | False positives, stored in mirrored source paths such as `audit/misreads/src/auth.md` for `src/auth.ts` |
+| `audit/design/` | Correct-by-design tradeoffs, stored in mirrored source paths such as `audit/design/src/auth.md` for `src/auth.ts` |
+| `audit/risks/` | Accepted risks and non-remediable constraints, stored in mirrored source paths such as `audit/risks/src/auth.md` for `src/auth.ts` |
 
-Exception entries identify only the source line because the exception file path mirrors the source file:
+Exception entries identify only the source line because the category and source file are encoded in the mirrored file path. If one issue spans multiple files, add an entry to each affected file's mirrored category file:
 
 ```md
 ### Plain language description

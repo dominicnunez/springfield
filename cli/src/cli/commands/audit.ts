@@ -25,9 +25,9 @@ import {
   logWarning,
 } from "../../ui/logger.js";
 import {
-  AUDIT_EXCEPTIONS_DIR,
+  AUDIT_EXCEPTION_DIRS,
   AUDIT_REPORT_FILE,
-  exceptionFileForSourceFile,
+  exceptionFilesForSourceFile,
   listExceptionMarkdownFiles,
 } from "../audit-paths.js";
 import { initializeAuditSession } from "../audit-session.js";
@@ -71,7 +71,7 @@ export interface AuditOptions {
   verbose?: boolean;
 }
 
-const EXCEPTION_PATHSPEC = "audit/exceptions";
+const EXCEPTION_PATHSPECS = [...AUDIT_EXCEPTION_DIRS];
 
 export function parseChangedExceptionFiles(statusLines: string[]): string[] {
   const files = new Set<string>();
@@ -81,7 +81,12 @@ export function parseChangedExceptionFiles(statusLines: string[]): string[] {
 
     const file = line.slice(3).trim();
     if (file.includes(" -> ")) continue;
-    if (!file.startsWith(`${EXCEPTION_PATHSPEC}/`) || !file.endsWith(".md")) {
+    if (
+      !EXCEPTION_PATHSPECS.some((pathspec) =>
+        file.startsWith(`${pathspec}/`),
+      ) ||
+      !file.endsWith(".md")
+    ) {
       continue;
     }
 
@@ -105,7 +110,7 @@ function runGit(args: string[]): { ok: boolean; stderr: string } {
 
 function commitExceptionFilesIfChanged(): void {
   const statusLines = runGitLines(
-    ["status", "--porcelain", "--", EXCEPTION_PATHSPEC],
+    ["status", "--porcelain", "--", ...EXCEPTION_PATHSPECS],
     "git status (exceptions)",
   );
   const changedFiles = parseChangedExceptionFiles(statusLines);
@@ -121,7 +126,7 @@ function commitExceptionFilesIfChanged(): void {
   }
 
   const stagedLines = runGitLines(
-    ["diff", "--cached", "--name-only", "--", EXCEPTION_PATHSPEC],
+    ["diff", "--cached", "--name-only", "--", ...EXCEPTION_PATHSPECS],
     "git diff --cached (exceptions)",
   );
   const stagedFiles = stagedLines.filter((f) => f.endsWith(".md"));
@@ -223,7 +228,9 @@ function loadExceptionEntriesFromFile(filePath: string): ExceptionEntry[] {
 function loadExceptionEntriesForSourceFile(
   sourceFile: string,
 ): ExceptionEntry[] {
-  return loadExceptionEntriesFromFile(exceptionFileForSourceFile(sourceFile));
+  return exceptionFilesForSourceFile(sourceFile).flatMap((file) =>
+    loadExceptionEntriesFromFile(file),
+  );
 }
 
 function normalizeText(value: string): string {
@@ -365,7 +372,7 @@ function buildAuditScopeInstructions(sourcePath: string | undefined): string {
     return [
       "Audit scope:",
       `- Audit only \`${promptPath}\` and, when it is a directory, its subpaths.`,
-      `- Do not inspect, analyze, or report files outside \`${promptPath}\` except for mirrored exception files needed for findings inside that scope.`,
+      `- Do not inspect, analyze, or report files outside \`${promptPath}\` except for categorized mirrored exception files needed for findings inside that scope.`,
       "- The path was prevalidated by SFK. If it becomes unavailable, write one Configuration finding to audit/report.md instead of broadening the scope.",
     ].join("\n");
   }
@@ -386,25 +393,32 @@ function listExceptionMarkdownFilesForScope(
   if (!normalized) return files;
 
   if (sourcePathLooksLikeFile(normalized)) {
-    const exceptionFile = exceptionFileForSourceFile(normalized);
-    return files.filter((file) => file === exceptionFile);
+    const exceptionFiles = new Set(exceptionFilesForSourceFile(normalized));
+    return files.filter((file) => exceptionFiles.has(file));
   }
 
-  const exceptionDir = join(AUDIT_EXCEPTIONS_DIR, normalized);
-  return files.filter((file) => file.startsWith(`${exceptionDir}${sep}`));
+  return files.filter((file) =>
+    AUDIT_EXCEPTION_DIRS.some((dir) =>
+      file.startsWith(`${join(dir, normalized)}${sep}`),
+    ),
+  );
 }
 
 function exceptionMarkdownPatternForScope(
   sourcePath: string | undefined,
 ): string {
   const normalized = sourcePath ? normalizeSourcePath(sourcePath) : "";
-  if (!normalized) return `${AUDIT_EXCEPTIONS_DIR}/**/*.md`;
-
-  if (sourcePathLooksLikeFile(normalized)) {
-    return exceptionFileForSourceFile(normalized);
+  if (!normalized) {
+    return AUDIT_EXCEPTION_DIRS.map((dir) => `${dir}/**/*.md`).join("\n");
   }
 
-  return `${join(AUDIT_EXCEPTIONS_DIR, normalized)}/**/*.md`;
+  if (sourcePathLooksLikeFile(normalized)) {
+    return exceptionFilesForSourceFile(normalized).join("\n");
+  }
+
+  return AUDIT_EXCEPTION_DIRS.map(
+    (dir) => `${join(dir, normalized)}/**/*.md`,
+  ).join("\n");
 }
 
 export function buildAuditPromptWithExceptions(
@@ -413,15 +427,12 @@ export function buildAuditPromptWithExceptions(
 ): string {
   const scopeInstructions = buildAuditScopeInstructions(sourcePath);
   const instructions = [
-    "Before writing audit/report.md, inspect the mirrored exception file for each candidate finding as needed; for src/auth.ts, inspect audit/exceptions/src/auth.md.",
-    "Read only the mirrored exception files and entries needed to rule in or rule out a candidate finding; do not ignore the directory, but avoid loading unrelated exception content.",
-    "Exception entries use **Line:** only because the mirrored exception file path identifies the source file.",
+    "Before writing audit/report.md, inspect the categorized mirrored exception files for each candidate finding as needed; for src/auth.ts, inspect audit/misreads/src/auth.md, audit/design/src/auth.md, and audit/risks/src/auth.md.",
+    "Read only the categorized mirrored exception files and entries needed to rule in or rule out a candidate finding; do not ignore those directories, but avoid loading unrelated exception content.",
+    "Exception entries use **Line:** only because the categorized mirrored exception file path identifies both the exception category and the source file.",
     "Do not write findings that are already covered by an existing exception unless the exception is clearly stale because the code has materially changed.",
     "If an exception still applies, suppress that finding instead of re-reporting it.",
   ].join(" ");
-  if (!existsSync(AUDIT_EXCEPTIONS_DIR)) {
-    return `${auditPrompt}\n\n${scopeInstructions}\n\n${instructions}`;
-  }
 
   const mdFiles = listExceptionMarkdownFilesForScope(sourcePath);
   const exceptionFileList =

@@ -9,13 +9,13 @@ import {
 describe("Willie audit prompts", () => {
   test("audit prompt checks exceptions before writing the report", () => {
     expect(DEFAULT_AUDIT_PROMPT).toContain(
-      "Before writing audit/report.md, inspect the mirrored exception file for each candidate finding as needed",
+      "Before writing audit/report.md, inspect the categorized mirrored exception files for each candidate finding as needed",
     );
     expect(DEFAULT_AUDIT_PROMPT).toContain(
       "Read only the exception files and entries needed to rule in or rule out that finding.",
     );
     expect(DEFAULT_AUDIT_PROMPT).toContain(
-      "Exception entries use **Line:** only because the mirrored exception file path identifies the source file.",
+      "Exception entries use **Line:** only because the categorized mirrored exception file path identifies the exception category and source file.",
     );
     expect(DEFAULT_AUDIT_PROMPT).toContain(
       "Do not re-report findings that are already covered by a still-applicable exception.",
@@ -49,9 +49,11 @@ describe("Willie audit prompts", () => {
       "Missing or weak tests, dead code, misleading comments, local config cleanup, validation gaps, and other repo-controlled maintenance work do NOT belong in exceptions",
     );
     expect(prompt).toContain(
-      "append to the mirrored exception file for the reported source file",
+      "append to the appropriate categorized mirrored exception file for the reported source file",
     );
-    expect(prompt).toContain("src/auth.ts -> audit/exceptions/src/auth.md");
+    expect(prompt).toContain("src/auth.ts -> audit/misreads/src/auth.md");
+    expect(prompt).toContain("audit/design/src/auth.md");
+    expect(prompt).toContain("audit/risks/src/auth.md");
     expect(prompt).not.toContain("risks.md");
     expect(prompt).not.toContain("misreads.md");
     expect(prompt).not.toContain("design.md");

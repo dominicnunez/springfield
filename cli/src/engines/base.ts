@@ -27,7 +27,7 @@ export const COMPLETE_MARKER = "<promise>COMPLETE</promise>";
 
 const FIX_TESTS_PROMPT_MAX_LINES = 100;
 const MIRRORED_EXCEPTION_FILE_EXAMPLE =
-  "src/auth.ts -> audit/exceptions/src/auth.md";
+  "src/auth.ts -> audit/misreads/src/auth.md, audit/design/src/auth.md, or audit/risks/src/auth.md";
 
 const COMMIT_STANDARD = `## Commit Message Standard
 
@@ -370,7 +370,7 @@ The format is critical: "### [Category]" with brackets, then severity/file/detai
    - Cruft tests that test implementation details instead of behavior (mocking internals, asserting on log output, snapshot tests of serialization formats)
    - Tests that pass but verify nothing meaningful (empty assertions, tautologies, verbatim duplicates of other tests)
    - Stale tests that reference removed or renamed code
-7. Before writing audit/report.md, inspect the mirrored exception file for each candidate finding as needed (${MIRRORED_EXCEPTION_FILE_EXAMPLE}). Read only the exception files and entries needed to rule in or rule out that finding. Exception entries use **Line:** only because the mirrored exception file path identifies the source file. Do not re-report findings that are already covered by a still-applicable exception.`;
+7. Before writing audit/report.md, inspect the categorized mirrored exception files for each candidate finding as needed (${MIRRORED_EXCEPTION_FILE_EXAMPLE}). Read only the exception files and entries needed to rule in or rule out that finding. Exception entries use **Line:** only because the categorized mirrored exception file path identifies the exception category and source file. Do not re-report findings that are already covered by a still-applicable exception.`;
 
 export const VALIDATE_PROMPT = `Review and validate or invalidate each item in audit/report.md. Be thorough — actually read the code at every referenced file:line. Do not just trust the audit description.
 
@@ -381,13 +381,16 @@ Rules:
    - FALSE POSITIVE: the audit misread the code, missed existing handling, or described behavior that doesn't actually occur
    - CORRECT-BY-DESIGN EXCEPTION: the finding describes real behavior, but the current behavior is intentional, defensible, and should not be changed
 3. A finding that is real but "minor", "broad", "low priority", "easy to fix", or "not worth this session" is NOT a false positive and is NOT correct-by-design — keep it in the report
-4. Move only FALSE POSITIVE and CORRECT-BY-DESIGN EXCEPTION findings to the mirrored exception file for the reported source file (${MIRRORED_EXCEPTION_FILE_EXAMPLE}) using this exact format:
+4. Move only FALSE POSITIVE and CORRECT-BY-DESIGN EXCEPTION findings to the appropriate categorized mirrored file for the reported source file (${MIRRORED_EXCEPTION_FILE_EXAMPLE}) using this exact format:
+   - FALSE POSITIVE findings go under audit/misreads/
+   - CORRECT-BY-DESIGN EXCEPTION findings go under audit/design/
+   - If one exception applies across multiple source files, append an entry to each affected file's mirrored category file
 
 \`\`\`
 ${EXCEPTION_FALSE_POSITIVE_EXAMPLE}
 \`\`\`
 
-   Create parent directories as needed. The exception file path identifies the source file; include only the line number in the entry.
+   Create parent directories as needed. The exception file path identifies the category and source file; include only the line number in the entry.
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
 5. If a finding describes a repo-controlled problem with a concrete remediation path in this codebase, it remains a REAL REMEDIATION finding for the fix step unless it is a FALSE POSITIVE or CORRECT-BY-DESIGN EXCEPTION
 6. For testing findings (missing coverage, cruft tests), verify the claim by reading the test files — confirm the gap actually exists or the test actually has the described problem. Weak or source-oriented tests are still real findings when the claimed weakness exists. Do not rubber-stamp testing findings.
@@ -421,25 +424,27 @@ export function generateFixPrompt(options: FixPromptOptions): string {
     ? `9. Delete audit/report.md when 100% resolved, then push committed changes.`
     : `9. Delete audit/report.md when 100% resolved. Do NOT push changes; Willie push-after-fix is disabled in config.`;
 
-  return `Fix the issues in audit/report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to mirrored files under audit/exceptions/.
+  return `Fix the issues in audit/report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to categorized mirrored files under audit/design/, audit/misreads/, or audit/risks/.
 
 Rules:
 1. Do proper long-term fixes, not quick-fix bandaids
 2. **Fix-effort rule:** If a finding can be fixed in the current session (wrong comments, missing constants, dead config, incomplete test coverage, trivial code cleanup), FIX IT. Do not punt easy fixes to exceptions.
 3. Do not write an exception for any finding with a concrete code, test, config, or doc remediation in this repo. Do the fix instead.
-4. Only move an item to audit/exceptions/ when no concrete repo fix is appropriate and one of these exception classes applies:
-   - The finding requires architectural changes disproportionate to its severity
-   - There is a genuine design tradeoff where the current approach is defensible
-   - The finding is about external constraints you cannot change (transitive deps, upstream bugs)
+4. Only move an item to a categorized mirrored exception file when no concrete repo fix is appropriate and one of these exception classes applies:
+   - The finding is factually wrong because the audit misread the code or missed existing handling: write to audit/misreads/
+   - The finding requires architectural changes disproportionate to its severity: write to audit/risks/
+   - There is a genuine design tradeoff where the current approach is defensible: write to audit/design/
+   - The finding is about external constraints you cannot change (transitive deps, upstream bugs): write to audit/risks/
    - "Disproportionate for this session" alone is NOT enough
    - Missing or weak tests, dead code, misleading comments, local config cleanup, validation gaps, and other repo-controlled maintenance work do NOT belong in exceptions
-5. When adding to exceptions, append to the mirrored exception file for the reported source file (${MIRRORED_EXCEPTION_FILE_EXAMPLE}) using this format:
+5. When adding to exceptions, append to the appropriate categorized mirrored exception file for the reported source file (${MIRRORED_EXCEPTION_FILE_EXAMPLE}) using this format:
+   - If one exception applies across multiple source files, append an entry to each affected file's mirrored category file
 
 \`\`\`
 ${EXCEPTION_REASON_EXAMPLE}
 \`\`\`
 
-   Create parent directories as needed. The exception file path identifies the source file; include only the line number in each entry.
+   Create parent directories as needed. The exception file path identifies the category and source file; include only the line number in each entry.
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
 6. Commit resolved work in semantic groups following the Willie commit message standard below.
    - Group fixes that address the same underlying issue, behavior, module, or config surface into one commit.

@@ -47,15 +47,15 @@ describe("audit step prompt building", () => {
       "Audit only that selected source-code path and its subpaths. Do not audit every repository path or file.",
     );
     expect(prompt).toContain(
-      "Before writing audit/report.md, inspect the mirrored exception file for each candidate finding as needed; for src/auth.ts, inspect audit/exceptions/src/auth.md.",
+      "Before writing audit/report.md, inspect the categorized mirrored exception files for each candidate finding as needed; for src/auth.ts, inspect audit/misreads/src/auth.md, audit/design/src/auth.md, and audit/risks/src/auth.md.",
     );
     expect(prompt).toContain(
-      "Read only the mirrored exception files and entries needed to rule in or rule out a candidate finding; do not ignore the directory, but avoid loading unrelated exception content.",
+      "Read only the categorized mirrored exception files and entries needed to rule in or rule out a candidate finding; do not ignore those directories, but avoid loading unrelated exception content.",
     );
   });
 
   test("lists current exception files without injecting their contents", () => {
-    const exceptionsDir = join(projectDir, "audit", "exceptions");
+    const exceptionsDir = join(projectDir, "audit", "risks");
     mkdirSync(join(exceptionsDir, "src"), { recursive: true });
     writeFileSync(
       join(exceptionsDir, "src", "rate-limit.md"),
@@ -65,7 +65,7 @@ describe("audit step prompt building", () => {
     const prompt = buildAuditPromptWithExceptions("base audit prompt");
 
     expect(prompt).toContain("Known exception files:");
-    expect(prompt).toContain("audit/exceptions/src/rate-limit.md");
+    expect(prompt).toContain("audit/risks/src/rate-limit.md");
     expect(prompt).toContain(
       "If an exception still applies, suppress that finding instead of re-reporting it.",
     );
@@ -74,7 +74,7 @@ describe("audit step prompt building", () => {
   });
 
   test("explicit source path constrains audit scope and listed exceptions", () => {
-    const exceptionsDir = join(projectDir, "audit", "exceptions");
+    const exceptionsDir = join(projectDir, "audit", "design");
     mkdirSync(join(exceptionsDir, "src"), { recursive: true });
     mkdirSync(join(exceptionsDir, "docs"), { recursive: true });
     writeFileSync(join(exceptionsDir, "src", "auth.md"), "# Auth");
@@ -85,12 +85,12 @@ describe("audit step prompt building", () => {
     expect(prompt).toContain(
       "Audit only `src` and, when it is a directory, its subpaths.",
     );
-    expect(prompt).toContain("audit/exceptions/src/auth.md");
-    expect(prompt).not.toContain("audit/exceptions/docs/guide.md");
+    expect(prompt).toContain("audit/design/src/auth.md");
+    expect(prompt).not.toContain("audit/design/docs/guide.md");
   });
 
   test("explicit source file lists only its mirrored exception file", () => {
-    const exceptionsDir = join(projectDir, "audit", "exceptions");
+    const exceptionsDir = join(projectDir, "audit", "misreads");
     mkdirSync(join(exceptionsDir, "src"), { recursive: true });
     writeFileSync(join(exceptionsDir, "src", "auth.md"), "# Auth");
     writeFileSync(join(exceptionsDir, "src", "api.md"), "# API");
@@ -103,8 +103,8 @@ describe("audit step prompt building", () => {
     expect(prompt).toContain(
       "Audit only `src/auth.ts` and, when it is a directory, its subpaths.",
     );
-    expect(prompt).toContain("audit/exceptions/src/auth.md");
-    expect(prompt).not.toContain("audit/exceptions/src/api.md");
+    expect(prompt).toContain("audit/misreads/src/auth.md");
+    expect(prompt).not.toContain("audit/misreads/src/api.md");
   });
 
   test("validates explicit audit source path before agent execution", () => {
@@ -148,7 +148,7 @@ describe("audit step prompt building", () => {
   });
 
   test("findMatchingException requires file match and textual similarity", () => {
-    const exceptionsDir = join(projectDir, "audit", "exceptions");
+    const exceptionsDir = join(projectDir, "audit", "risks");
     mkdirSync(join(exceptionsDir, "src"), { recursive: true });
     const filePath = join(exceptionsDir, "src", "auth.md");
     writeFileSync(
@@ -188,7 +188,7 @@ describe("audit step prompt building", () => {
   });
 
   test("findMatchingException ignores exceptions in other mirrored files", () => {
-    const exceptionsDir = join(projectDir, "audit", "exceptions");
+    const exceptionsDir = join(projectDir, "audit", "risks");
     mkdirSync(join(exceptionsDir, "src"), { recursive: true });
     writeFileSync(
       join(exceptionsDir, "src", "api.md"),
@@ -213,7 +213,7 @@ describe("audit step prompt building", () => {
   });
 
   test("applyExceptionFilterToReport removes matched findings and keeps unmatched findings", () => {
-    const exceptionsDir = join(projectDir, "audit", "exceptions");
+    const exceptionsDir = join(projectDir, "audit", "risks");
     mkdirSync(join(exceptionsDir, "src"), { recursive: true });
     writeFileSync(
       join(exceptionsDir, "src", "auth.md"),
@@ -256,7 +256,7 @@ describe("audit step prompt building", () => {
   });
 
   test("applyExceptionFilterToReport deletes the report when all findings are suppressed", () => {
-    const exceptionsDir = join(projectDir, "audit", "exceptions");
+    const exceptionsDir = join(projectDir, "audit", "risks");
     mkdirSync(join(exceptionsDir, "src"), { recursive: true });
     writeFileSync(
       join(exceptionsDir, "src", "auth.md"),
@@ -287,18 +287,18 @@ describe("audit step prompt building", () => {
 
   test("parseChangedExceptionFiles returns only changed exception markdown files", () => {
     const files = parseChangedExceptionFiles([
-      " M audit/exceptions/src/auth.md",
-      "A  audit/exceptions/src/api.md",
-      "?? audit/exceptions/cli/run.md",
+      " M audit/design/src/auth.md",
+      "A  audit/misreads/src/api.md",
+      "?? audit/risks/cli/run.md",
       " M audit/report.md",
       " M src/index.ts",
-      "R  audit/exceptions/old/path.md -> audit/exceptions/new/path.md",
+      "R  audit/risks/old/path.md -> audit/risks/new/path.md",
     ]);
 
     expect(files).toEqual([
-      "audit/exceptions/cli/run.md",
-      "audit/exceptions/src/api.md",
-      "audit/exceptions/src/auth.md",
+      "audit/design/src/auth.md",
+      "audit/misreads/src/api.md",
+      "audit/risks/cli/run.md",
     ]);
   });
 });

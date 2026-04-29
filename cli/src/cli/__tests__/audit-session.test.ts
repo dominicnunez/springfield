@@ -96,13 +96,9 @@ describe("audit session", () => {
     expect(session).not.toBeNull();
     expect(session?.auditPrompt).toBe("cli prompt");
     expect(session?.auditPromptSource).toBe(cliPrompt);
-    expect(existsSync(join(projectDir, "audit", "exceptions"))).toBe(true);
-    expect(
-      existsSync(join(projectDir, "audit", "exceptions", "risks.md")),
-    ).toBe(false);
-    expect(
-      existsSync(join(projectDir, "audit", "exceptions", "design.md")),
-    ).toBe(false);
+    expect(existsSync(join(projectDir, "audit", "design"))).toBe(true);
+    expect(existsSync(join(projectDir, "audit", "misreads"))).toBe(true);
+    expect(existsSync(join(projectDir, "audit", "risks"))).toBe(true);
   });
 
   test("detects lint and test commands during session initialization", () => {
