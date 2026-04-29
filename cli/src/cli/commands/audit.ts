@@ -457,8 +457,8 @@ function logToFile(
   }
 }
 
-type AuditStepResult = "continue" | "stop" | "rate-limited";
-type StepResult = "ok" | "rate-limited";
+type AuditStepResult = "continue" | "stop" | "rate-limited" | "failed";
+type StepResult = "ok" | "rate-limited" | "failed";
 
 interface AuditStepOutput {
   result: AuditStepResult;
@@ -489,6 +489,7 @@ async function runAuditStep(
     logWarning(
       `${engine.name} exited with code ${result.exitCode} for audit step`,
     );
+    return { result: "failed", matchedExceptions: "" };
   }
 
   if (!existsSync(AUDIT_REPORT_FILE)) {
@@ -551,6 +552,7 @@ async function runValidateStep(
     logWarning(
       `${engine.name} exited with code ${result.exitCode} for validate step`,
     );
+    return "failed";
   }
 
   if (!existsSync(AUDIT_REPORT_FILE)) {
@@ -591,6 +593,7 @@ async function runFixStep(
     logWarning(
       `${engine.name} exited with code ${result.exitCode} for fix step`,
     );
+    return "failed";
   }
 
   if (!existsSync(AUDIT_REPORT_FILE)) {
@@ -643,7 +646,7 @@ async function withRateLimitRetry<T>(
   return { signal: "abort" };
 }
 
-async function runPipeline(
+export async function runPipeline(
   steps: AuditStep[],
   engine: Engine,
   auditPrompt: string,
@@ -667,6 +670,7 @@ async function runPipeline(
           engine,
         );
         if (r.signal !== "ok") return r.signal;
+        if (r.result.result === "failed") return "abort";
         if (r.result.result === "stop") return "stop";
         matchedExceptions = r.result.matchedExceptions;
         break;
@@ -680,6 +684,7 @@ async function runPipeline(
           engine,
         );
         if (r.signal !== "ok") return r.signal;
+        if (r.result === "failed") return "abort";
         break;
       }
       case "fix": {
@@ -691,6 +696,7 @@ async function runPipeline(
           engine,
         );
         if (r.signal !== "ok") return r.signal;
+        if (r.result === "failed") return "abort";
         break;
       }
     }
@@ -777,7 +783,10 @@ export async function auditLoop(
       config,
     );
 
-    if (signal === "abort") return;
+    if (signal === "abort") {
+      process.exitCode = 1;
+      return;
+    }
     if (signal === "retry") {
       iter--;
       continue;

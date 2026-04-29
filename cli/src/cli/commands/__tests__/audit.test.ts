@@ -9,12 +9,15 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Config } from "../../../config/loader.js";
+import type { Engine, EngineResult } from "../../../engines/base.js";
 import {
   applyExceptionFilterToReport,
   buildAuditPromptWithExceptions,
   findMatchingException,
   parseAuditReport,
   parseChangedExceptionFiles,
+  runPipeline,
   validateAuditSourcePath,
 } from "../audit.js";
 
@@ -300,5 +303,37 @@ describe("audit step prompt building", () => {
       "audit/misreads/src/api.md",
       "audit/risks/cli/run.md",
     ]);
+  });
+
+  test("runPipeline aborts when the audit engine fails without a report", async () => {
+    const engine: Engine = {
+      name: "stub",
+      model: "stub-model",
+      isAvailable: () => true,
+      run: async (): Promise<EngineResult> => ({
+        success: false,
+        output: "auth failed",
+        exitCode: 1,
+      }),
+    };
+    const config = {
+      softLimitRetries: 0,
+      softLimitWait: 0,
+    } as Config;
+
+    const signal = await runPipeline(
+      ["audit"],
+      engine,
+      "audit prompt",
+      undefined,
+      "fix prompt",
+      projectDir,
+      1,
+      { retries: 0 },
+      config,
+    );
+
+    expect(signal).toBe("abort");
+    expect(existsSync(join(projectDir, "audit", "report.md"))).toBe(false);
   });
 });
