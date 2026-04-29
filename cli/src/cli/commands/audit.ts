@@ -336,10 +336,18 @@ function formatPromptPath(path: string): string {
 }
 
 function normalizeSourcePath(sourcePath: string): string {
-  return sourcePath
+  const normalized = sourcePath
     .trim()
     .replace(/^\.\/+/, "")
     .replace(/\/+$/, "");
+  return normalized || ".";
+}
+
+export function validateAuditSourcePath(
+  sourcePath: string | undefined,
+): boolean {
+  if (!sourcePath) return true;
+  return existsSync(normalizeSourcePath(sourcePath));
 }
 
 function sourcePathLooksLikeFile(sourcePath: string): boolean {
@@ -358,7 +366,7 @@ function buildAuditScopeInstructions(sourcePath: string | undefined): string {
       "Audit scope:",
       `- Audit only \`${promptPath}\` and, when it is a directory, its subpaths.`,
       `- Do not inspect, analyze, or report files outside \`${promptPath}\` except for mirrored exception files needed for findings inside that scope.`,
-      "- If the path does not exist, report that as the audit blocker instead of broadening the scope.",
+      "- The path was prevalidated by SFK. If it becomes unavailable, write one Configuration finding to audit/report.md instead of broadening the scope.",
     ].join("\n");
   }
 
@@ -684,6 +692,12 @@ export async function auditLoop(
   config: Config,
   options: AuditOptions,
 ): Promise<void> {
+  if (!validateAuditSourcePath(options.sourcePath)) {
+    logError(`Audit source path does not exist: ${options.sourcePath}`);
+    process.exitCode = 1;
+    return;
+  }
+
   const session = initializeAuditSession(config, options, DEFAULT_AUDIT_PROMPT);
   if (!session) {
     process.exitCode = 1;

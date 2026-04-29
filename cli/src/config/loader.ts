@@ -43,6 +43,7 @@ export interface Config {
   willieAuditPrompt: string | undefined;
   willieModel: string | undefined;
   willieEffort: EffortLevel | undefined;
+  williePushAfterFix: boolean;
   lintCmd: string | undefined;
 
   // Logging
@@ -86,6 +87,7 @@ const EXAMPLE_CONFIG_CONTENT = `# SFK Configuration
 
 [willie]
 # max-iterations = 0
+# push-after-fix = false
 # audit-prompt = audit/prompt.md
 # lint-cmd =
 # model = opus
@@ -394,6 +396,14 @@ export function applyConfigToConfig(
     issues,
     { min: 0 },
   );
+  assignBoolean(
+    parsed,
+    "willie.push-after-fix",
+    (value) => {
+      config.williePushAfterFix = value;
+    },
+    issues,
+  );
   if (parsed["willie.audit-prompt"]?.trim())
     config.willieAuditPrompt = parsed["willie.audit-prompt"];
   if (parsed["willie.lint-cmd"]?.trim())
@@ -536,6 +546,11 @@ function completeConfig(config: Partial<Config>, issues: string[]): Config {
     config.willieMaxIterations,
     issues,
   );
+  const williePushAfterFix = requireConfigValue(
+    "willie.push-after-fix",
+    config.williePushAfterFix,
+    issues,
+  );
 
   if (issues.length > 0) {
     throw new ConfigError(buildConfigErrorMessage(issues));
@@ -563,6 +578,7 @@ function completeConfig(config: Partial<Config>, issues: string[]): Config {
     willieAuditPrompt: config.willieAuditPrompt,
     willieModel: config.willieModel,
     willieEffort: config.willieEffort,
+    williePushAfterFix,
     lintCmd: config.lintCmd,
     logDir: SFK_LOG_DIR,
     progressDir: SFK_PROGRESS_DIR,

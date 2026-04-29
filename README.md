@@ -102,6 +102,7 @@ Created automatically on `npm install -g sfk` as a commented example. SFK exits 
 
 [willie]
 # max-iterations = 0
+# push-after-fix = false
 ```
 
 ### Required Setup
@@ -140,6 +141,7 @@ audit-after-complete = false
 
 [willie]
 max-iterations = 0
+push-after-fix = false
 ```
 
 ### Per-Agent Model/Effort
@@ -318,7 +320,7 @@ Each iteration runs three steps:
 
 1. **Audit** — Opus scans the requested source path, or first identifies the source path when none is provided, may consult mirrored files under `audit/exceptions/` selectively, and SFK filters any still-matching exceptions out of `audit/report.md` before validation
 2. **Validate** — Opus reads the actual code at each finding and removes only true false positives or correct-by-design findings from the report
-3. **Fix** — Opus applies proper long-term fixes, commits each one, and uses `audit/exceptions/` only for genuine misreads, design decisions, or non-remediable risks
+3. **Fix** — Opus applies proper long-term fixes, commits each one, pushes only when `[willie] push-after-fix = true`, and uses `audit/exceptions/` only for genuine misreads, design decisions, or non-remediable risks
 
 The loop exits when an audit produces zero findings.
 

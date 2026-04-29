@@ -36,6 +36,7 @@ function baseConfig(overrides: Partial<Config> = {}): Config {
     willieAuditPrompt: undefined,
     willieModel: undefined,
     willieEffort: undefined,
+    williePushAfterFix: false,
     lintCmd: undefined,
     logDir: join(homedir(), ".sfk", "logs"),
     progressDir: join(homedir(), ".sfk", "progress"),
@@ -159,6 +160,7 @@ audit-after-complete = true
 
 [willie]
 max-iterations = 3
+push-after-fix = true
 audit-prompt = audit/prompt.md
 model = opus
 effort = xhigh
@@ -187,6 +189,7 @@ progress-dir = /tmp/progress
       expect(result["ralph.effort"]).toBe("xhigh");
       expect(result["ralph.audit-after-complete"]).toBe("true");
       expect(result["willie.max-iterations"]).toBe("3");
+      expect(result["willie.push-after-fix"]).toBe("true");
       expect(result["willie.audit-prompt"]).toBe("audit/prompt.md");
       expect(result["willie.model"]).toBe("opus");
       expect(result["willie.effort"]).toBe("xhigh");
@@ -282,11 +285,13 @@ progress-dir = /tmp/progress
       const config = baseConfig();
       applyConfigToConfig(config, {
         "willie.max-iterations": "3",
+        "willie.push-after-fix": "true",
         "willie.audit-prompt": "audit/prompt.md",
         "willie.model": "opus",
         "willie.effort": "xhigh",
       });
       expect(config.willieMaxIterations).toBe(3);
+      expect(config.williePushAfterFix).toBe(true);
       expect(config.willieAuditPrompt).toBe("audit/prompt.md");
       expect(config.willieModel).toBe("opus");
       expect(config.willieEffort).toBe("xhigh");

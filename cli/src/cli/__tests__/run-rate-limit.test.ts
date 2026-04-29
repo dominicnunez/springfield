@@ -26,6 +26,7 @@ function baseConfig(overrides: Partial<Config> = {}): Config {
     willieAuditPrompt: undefined,
     willieModel: undefined,
     willieEffort: undefined,
+    williePushAfterFix: false,
     lintCmd: undefined,
     logDir: "/tmp/logs",
     progressDir: "/tmp/progress",

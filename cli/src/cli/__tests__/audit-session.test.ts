@@ -36,6 +36,7 @@ function baseConfig(root: string, overrides: Partial<Config> = {}): Config {
     willieAuditPrompt: undefined,
     willieModel: "audit-model",
     willieEffort: "medium",
+    williePushAfterFix: false,
     lintCmd: undefined,
     logDir: join(root, "logs"),
     progressDir: join(root, "progress"),
@@ -123,6 +124,19 @@ describe("audit session", () => {
     expect(session?.testCmd).toBe("npm test");
     expect(session?.fixPrompt).toContain("npx biome check .");
     expect(session?.fixPrompt).toContain("npm test");
+    expect(session?.fixPrompt).toContain("Do NOT push changes");
+  });
+
+  test("passes Willie push config into the fix prompt", () => {
+    const session = initializeAuditSession(
+      baseConfig(tempRoot, { williePushAfterFix: true }),
+      {},
+      "fallback prompt",
+      stubEngine(),
+    );
+
+    expect(session).not.toBeNull();
+    expect(session?.fixPrompt).toContain("push committed changes");
   });
 
   test("returns null when the selected engine is unavailable", () => {

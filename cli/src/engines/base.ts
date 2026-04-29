@@ -345,10 +345,12 @@ export const VALIDATE_PROMPT = `Review and validate or invalidate each item in a
 
 Rules:
 1. Read the actual code at the referenced file:line
-2. Determine if the finding is FACTUALLY WRONG (false positive) or REAL
-3. A finding is a false positive ONLY if the audit misread the code, missed existing handling, or described behavior that doesn't actually occur
-4. A finding that is real but "minor", "broad", "low priority", "easy to fix", or "not worth this session" is NOT a false positive — keep it in the report
-5. Move only genuine false positives to the mirrored exception file for the reported source file (${MIRRORED_EXCEPTION_FILE_EXAMPLE}) using this exact format:
+2. Classify each finding as one of:
+   - REAL REMEDIATION: the issue exists and has a concrete code, test, config, or doc fix in this repo
+   - FALSE POSITIVE: the audit misread the code, missed existing handling, or described behavior that doesn't actually occur
+   - CORRECT-BY-DESIGN EXCEPTION: the finding describes real behavior, but the current behavior is intentional, defensible, and should not be changed
+3. A finding that is real but "minor", "broad", "low priority", "easy to fix", or "not worth this session" is NOT a false positive and is NOT correct-by-design — keep it in the report
+4. Move only FALSE POSITIVE and CORRECT-BY-DESIGN EXCEPTION findings to the mirrored exception file for the reported source file (${MIRRORED_EXCEPTION_FILE_EXAMPLE}) using this exact format:
 
 \`\`\`
 ${EXCEPTION_FALSE_POSITIVE_EXAMPLE}
@@ -356,46 +358,51 @@ ${EXCEPTION_FALSE_POSITIVE_EXAMPLE}
 
    Create parent directories as needed. The exception file path identifies the source file; include only the line number in the entry.
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
-6. If a finding describes a repo-controlled problem with a concrete remediation path in this codebase, it remains a real finding for the fix step unless it is factually wrong or correct by design
-7. For testing findings (missing coverage, cruft tests), verify the claim by reading the test files — confirm the gap actually exists or the test actually has the described problem. Weak or source-oriented tests are still real findings when the claimed weakness exists. Do not rubber-stamp testing findings.
-8. Remove invalidated items from audit/report.md
-9. If ALL items are invalidated, delete audit/report.md entirely
-10. Do not reference finding IDs or category labels in commit messages`;
+5. If a finding describes a repo-controlled problem with a concrete remediation path in this codebase, it remains a REAL REMEDIATION finding for the fix step unless it is a FALSE POSITIVE or CORRECT-BY-DESIGN EXCEPTION
+6. For testing findings (missing coverage, cruft tests), verify the claim by reading the test files — confirm the gap actually exists or the test actually has the described problem. Weak or source-oriented tests are still real findings when the claimed weakness exists. Do not rubber-stamp testing findings.
+7. Remove invalidated items from audit/report.md
+8. If ALL items are invalidated, delete audit/report.md entirely
+9. Do not reference finding IDs or category labels in commit messages`;
 
 export interface FixPromptOptions {
   testCmd: string | undefined;
   lintCmd: string | undefined;
+  pushAfterFix: boolean;
 }
 
 export function generateFixPrompt(options: FixPromptOptions): string {
-  const { testCmd, lintCmd } = options;
+  const { testCmd, lintCmd, pushAfterFix } = options;
 
   let verifyInstructions: string;
   if (testCmd && lintCmd) {
-    verifyInstructions = `7. Before pushing, run lint and tests. Fix any failures your changes introduced. Do not push with lint warnings or test failures.
+    verifyInstructions = `8. Before finishing, run lint and tests. Fix any failures your changes introduced. Do not finish with lint warnings or test failures.
    - Lint: \`${lintCmd}\`
    - Test: \`${testCmd}\``;
   } else if (testCmd) {
-    verifyInstructions = `7. Before pushing, run tests: \`${testCmd}\`. Fix any failures your changes introduced. Do not push with test failures. No lint command detected — skip linting.`;
+    verifyInstructions = `8. Before finishing, run tests: \`${testCmd}\`. Fix any failures your changes introduced. Do not finish with test failures. No lint command detected — skip linting.`;
   } else if (lintCmd) {
-    verifyInstructions = `7. Before pushing, run lint: \`${lintCmd}\`. Fix any failures your changes introduced. Do not push with lint warnings. No test command detected — skip testing.`;
+    verifyInstructions = `8. Before finishing, run lint: \`${lintCmd}\`. Fix any failures your changes introduced. Do not finish with lint warnings. No test command detected — skip testing.`;
   } else {
-    verifyInstructions = `7. No lint or test command detected — skip verification. If you know how to run them for this project, do so manually.`;
+    verifyInstructions = `8. No lint or test command detected — skip verification. If you know how to run them for this project, do so manually.`;
   }
+
+  const completionInstructions = pushAfterFix
+    ? `9. Delete audit/report.md when 100% resolved, then push committed changes.`
+    : `9. Delete audit/report.md when 100% resolved. Do NOT push changes; Willie push-after-fix is disabled in config.`;
 
   return `Fix the issues in audit/report.md. Do proper long-term fixes, not quick-fix bandaids. Do not leave the report behind — either fix everything or move remaining items to mirrored files under audit/exceptions/.
 
 Rules:
 1. Do proper long-term fixes, not quick-fix bandaids
 2. **Fix-effort rule:** If a finding can be fixed in the current session (wrong comments, missing constants, dead config, incomplete test coverage, trivial code cleanup), FIX IT. Do not punt easy fixes to exceptions.
-3. Only move items to audit/exceptions/ when ALL of these are true:
-   - The finding requires architectural changes disproportionate to its severity, OR
-   - There is a genuine design tradeoff where the current approach is defensible, OR
+3. Do not write an exception for any finding with a concrete code, test, config, or doc remediation in this repo. Do the fix instead.
+4. Only move an item to audit/exceptions/ when no concrete repo fix is appropriate and one of these exception classes applies:
+   - The finding requires architectural changes disproportionate to its severity
+   - There is a genuine design tradeoff where the current approach is defensible
    - The finding is about external constraints you cannot change (transitive deps, upstream bugs)
    - "Disproportionate for this session" alone is NOT enough
-   - If you can describe concrete code, test, config, or doc changes in this repo that would remediate the finding, do the fix instead of writing an exception
-    - Missing or weak tests, dead code, misleading comments, local config cleanup, validation gaps, and other repo-controlled maintenance work do NOT belong in exceptions
- 4. When adding to exceptions, append to the mirrored exception file for the reported source file (${MIRRORED_EXCEPTION_FILE_EXAMPLE}) using this format:
+   - Missing or weak tests, dead code, misleading comments, local config cleanup, validation gaps, and other repo-controlled maintenance work do NOT belong in exceptions
+5. When adding to exceptions, append to the mirrored exception file for the reported source file (${MIRRORED_EXCEPTION_FILE_EXAMPLE}) using this format:
 
 \`\`\`
 ${EXCEPTION_REASON_EXAMPLE}
@@ -403,10 +410,10 @@ ${EXCEPTION_REASON_EXAMPLE}
 
    Create parent directories as needed. The exception file path identifies the source file; include only the line number in each entry.
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
-5. Commit each fix following the commit standard below.
-6. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
+6. Commit each fix following the commit standard below.
+7. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
 ${verifyInstructions}
-8. Delete audit/report.md when 100% resolved and push
+${completionInstructions}
 
 ${COMMIT_STANDARD}`;
 }

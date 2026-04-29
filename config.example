@@ -36,6 +36,7 @@
 
 [willie]
 # max-iterations = 0
+# push-after-fix = false
 # audit-prompt = audit/prompt.md
 # lint-cmd =
 # model = opus

@@ -15,6 +15,7 @@ import {
   findMatchingException,
   parseAuditReport,
   parseChangedExceptionFiles,
+  validateAuditSourcePath,
 } from "../audit.js";
 
 describe("audit step prompt building", () => {
@@ -104,6 +105,17 @@ describe("audit step prompt building", () => {
     );
     expect(prompt).toContain("audit/exceptions/src/auth.md");
     expect(prompt).not.toContain("audit/exceptions/src/api.md");
+  });
+
+  test("validates explicit audit source path before agent execution", () => {
+    mkdirSync(join(projectDir, "src"), { recursive: true });
+    writeFileSync(join(projectDir, "src", "auth.ts"), "export {};\n");
+
+    expect(validateAuditSourcePath(undefined)).toBe(true);
+    expect(validateAuditSourcePath("./")).toBe(true);
+    expect(validateAuditSourcePath("src")).toBe(true);
+    expect(validateAuditSourcePath("./src/auth.ts")).toBe(true);
+    expect(validateAuditSourcePath("missing/path.ts")).toBe(false);
   });
 
   test("parseAuditReport parses multiple findings", () => {

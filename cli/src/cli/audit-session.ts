@@ -106,6 +106,10 @@ export function initializeAuditSession(
     auditPromptSource: resolvedPrompt.source,
     lintCmd,
     testCmd,
-    fixPrompt: generateFixPrompt({ testCmd, lintCmd }),
+    fixPrompt: generateFixPrompt({
+      testCmd,
+      lintCmd,
+      pushAfterFix: config.williePushAfterFix,
+    }),
   };
 }
