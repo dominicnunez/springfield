@@ -74,6 +74,48 @@ describe("Willie audit prompts", () => {
     expect(pushPrompt).toContain("push committed changes");
   });
 
+  test("fix prompt asks Willie to group commits semantically", () => {
+    const prompt = generateFixPrompt({
+      testCmd: undefined,
+      lintCmd: undefined,
+      pushAfterFix: false,
+    });
+
+    expect(prompt).toContain("Commit resolved work in semantic groups");
+    expect(prompt).toContain(
+      "Group fixes that address the same underlying issue, behavior, module, or config surface into one commit.",
+    );
+    expect(prompt).toContain(
+      "Do not make one commit per file or per audit finding when the changes are part of the same coherent fix.",
+    );
+    expect(prompt).toContain("One coherent change set per commit");
+  });
+
+  test("fix prompt uses Willie plain two-paragraph commit messages", () => {
+    const prompt = generateFixPrompt({
+      testCmd: undefined,
+      lintCmd: undefined,
+      pushAfterFix: false,
+    });
+
+    expect(prompt).toContain("## Willie Commit Message Standard");
+    expect(prompt).toContain(
+      "Use a plain commit message with a one-sentence what line, a blank line,",
+    );
+    expect(prompt).toContain("<single sentence describing what changed>");
+    expect(prompt).toContain("<plain description of why it changed>");
+    expect(prompt).toContain(
+      "First line: exactly one plain sentence describing what changed",
+    );
+    expect(prompt).toContain(
+      "Aim to keep the what line and wrapped why lines around 75 characters",
+    );
+    expect(prompt).toContain(
+      "Do NOT use type prefixes, scopes, labels, bullets, or trailers",
+    );
+    expect(prompt).not.toContain("<type>: <subject>");
+  });
+
   test("ralph prompt defines plain prose conventional commit bodies", () => {
     const prompt = generatePrompt({
       skipCommit: false,

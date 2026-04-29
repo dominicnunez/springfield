@@ -62,9 +62,40 @@ Rules:
 - Body text must be plain prose, not labeled sections like \`Why:\`, \`What:\`, or \`Notes:\`
 - Wrap longer bodies across multiple short lines instead of one long line
 - Use a \`BREAKING CHANGE:\` footer when migration detail is needed
-- One concern per commit — two things = two commits
+- One coherent change set per commit — group related code, tests, docs, and config together; split unrelated concerns
 - Do NOT add Co-Authored-By or AI attribution
 - Do NOT reference audit report IDs, finding numbers, or internal file paths`;
+
+const WILLIE_COMMIT_STANDARD = `## Willie Commit Message Standard
+
+Use a plain commit message with a one-sentence what line, a blank line,
+and a why paragraph. Do not use Conventional Commits.
+This Willie-specific format overrides Ralph's default commit style.
+
+Format:
+\`\`\`
+<single sentence describing what changed>
+
+<plain description of why it changed>
+\`\`\`
+
+Rules:
+- First line: exactly one plain sentence describing what changed
+- Second paragraph: plain description of why it changed
+- Separate the what line and why paragraph with exactly one blank line
+- Aim to keep the what line and wrapped why lines around 75 characters
+- Do NOT use type prefixes, scopes, labels, bullets, or trailers
+- Do NOT use labeled sections like \`What:\`, \`Why:\`, or \`Notes:\`
+- One coherent change set per commit — group related code, tests, docs, and config together; split unrelated concerns
+- Do NOT add Co-Authored-By or AI attribution
+- Do NOT reference audit report IDs, finding numbers, report categories, or audit/report.md
+
+Example:
+\`\`\`
+Validate audit source paths before running Willie
+
+Missing paths previously looked like clean audits because no report was written.
+\`\`\``;
 
 export interface PromptOptions {
   skipCommit: boolean;
@@ -410,10 +441,14 @@ ${EXCEPTION_REASON_EXAMPLE}
 
    Create parent directories as needed. The exception file path identifies the source file; include only the line number in each entry.
    Do NOT include audit report IDs, finding numbers, or category labels — plain language only
-6. Commit each fix following the commit standard below.
+6. Commit resolved work in semantic groups following the Willie commit message standard below.
+   - Group fixes that address the same underlying issue, behavior, module, or config surface into one commit.
+   - Include related code, tests, docs, and config updates for that group in the same commit.
+   - Do not make one commit per file or per audit finding when the changes are part of the same coherent fix.
+   - Split unrelated fixes, refactors, and formatting-only work into separate commits.
 7. Do not reference finding IDs, report categories, or audit/report.md in commit messages.
 ${verifyInstructions}
 ${completionInstructions}
 
-${COMMIT_STANDARD}`;
+${WILLIE_COMMIT_STANDARD}`;
 }
