@@ -93,7 +93,7 @@ describe("Willie audit prompts", () => {
     expect(prompt).toContain("One coherent change set per commit");
   });
 
-  test("fix prompt uses Willie plain two-paragraph commit messages", () => {
+  test("fix prompt uses Willie conventional commits with why body", () => {
     const prompt = generateFixPrompt({
       testCmd: undefined,
       lintCmd: undefined,
@@ -102,20 +102,23 @@ describe("Willie audit prompts", () => {
 
     expect(prompt).toContain("## Willie Commit Message Standard");
     expect(prompt).toContain(
-      "Use a plain commit message with a one-sentence what line, a blank line,",
+      "Use Conventional Commits 1.0.0. Willie uses the commit description for",
     );
-    expect(prompt).toContain("<single sentence describing what changed>");
-    expect(prompt).toContain("<plain description of why it changed>");
+    expect(prompt).toContain("<type>[optional scope]: <description>");
+    expect(prompt).toContain("[optional body]");
+    expect(prompt).toContain("[optional footer(s)]");
     expect(prompt).toContain(
-      "First line: exactly one plain sentence describing what changed",
-    );
-    expect(prompt).toContain(
-      "Aim to keep the what line and wrapped why lines around 75 characters",
+      "The description is the single-sentence what changed summary",
     );
     expect(prompt).toContain(
-      "Do NOT use type prefixes, scopes, labels, bullets, or trailers",
+      "The optional body is the why section; use it when the rationale matters",
     );
-    expect(prompt).not.toContain("<type>: <subject>");
+    expect(prompt).toContain(
+      "Keep each body line around 75 characters for a consistent styled message",
+    );
+    expect(prompt).toContain(
+      "fix(audit): validate source paths before running Willie",
+    );
   });
 
   test("ralph prompt defines plain prose conventional commit bodies", () => {

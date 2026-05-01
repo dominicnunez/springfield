@@ -68,33 +68,45 @@ Rules:
 
 const WILLIE_COMMIT_STANDARD = `## Willie Commit Message Standard
 
-Use a plain commit message with a one-sentence what line, a blank line,
-and a why paragraph. Do not use Conventional Commits.
-This Willie-specific format overrides Ralph's default commit style.
+Use Conventional Commits 1.0.0. Willie uses the commit description for
+what changed and the optional body for why it changed.
 
 Format:
 \`\`\`
-<single sentence describing what changed>
+<type>[optional scope]: <description>
 
-<plain description of why it changed>
+[optional body]
+
+[optional footer(s)]
 \`\`\`
 
+Types:
+- **feat:** new feature or capability
+- **fix:** bug fix
+- **refactor:** code change that neither fixes a bug nor adds a feature
+- **test:** adding or updating tests
+- **docs:** documentation only
+- **chore:** maintenance, config, tooling
+- **perf:** performance improvement
+- **security:** security fix or hardening
+
 Rules:
-- First line: exactly one plain sentence describing what changed
-- Second paragraph: plain description of why it changed
-- Separate the what line and why paragraph with exactly one blank line
-- Aim to keep the what line and wrapped why lines around 75 characters
-- Do NOT use type prefixes, scopes, labels, bullets, or trailers
+- The description is the single-sentence what changed summary
+- The optional body is the why section; use it when the rationale matters
+- Separate the description and body with exactly one blank line when a body is present
+- Keep each body line around 75 characters for a consistent styled message
 - Do NOT use labeled sections like \`What:\`, \`Why:\`, or \`Notes:\`
+- Use \`!\` or a \`BREAKING CHANGE:\` footer when the change is breaking
 - One coherent change set per commit — group related code, tests, docs, and config together; split unrelated concerns
 - Do NOT add Co-Authored-By or AI attribution
 - Do NOT reference audit report IDs, finding numbers, report categories, or audit/report.md
 
 Example:
 \`\`\`
-Validate audit source paths before running Willie
+fix(audit): validate source paths before running Willie
 
-Missing paths previously looked like clean audits because no report was written.
+Missing paths previously looked like clean audits because no report was
+written, so invalid audit scopes need to fail before agent execution.
 \`\`\``;
 
 export interface PromptOptions {
