@@ -306,6 +306,7 @@ describe("audit step prompt building", () => {
   });
 
   test("runPipeline aborts when the audit engine fails without a report", async () => {
+    const logFile = join(projectDir, "willie.log");
     const engine: Engine = {
       name: "stub",
       model: "stub-model",
@@ -327,7 +328,7 @@ describe("audit step prompt building", () => {
       "audit prompt",
       undefined,
       "fix prompt",
-      projectDir,
+      logFile,
       1,
       { retries: 0 },
       config,
@@ -335,5 +336,9 @@ describe("audit step prompt building", () => {
 
     expect(signal).toBe("abort");
     expect(existsSync(join(projectDir, "audit", "report.md"))).toBe(false);
+    expect(existsSync(join(projectDir, "iter1-audit.log"))).toBe(false);
+    expect(readFileSync(logFile, "utf-8")).toContain(
+      "===== Willie iteration 1: audit output =====\nauth failed\n",
+    );
   });
 });

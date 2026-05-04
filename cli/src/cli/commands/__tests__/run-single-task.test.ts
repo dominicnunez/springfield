@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Config } from "../../../config/loader.js";
@@ -100,6 +106,10 @@ describe("single task mode", () => {
     expect(prompts.length).toBe(1);
     expect(prompts[0]).toContain(task);
     expect(existsSync(join(projectDir, "PRD.md"))).toBe(false);
+
+    const logFiles = readdirSync(join(tempRoot, "logs", "project", "ralph"));
+    expect(logFiles).toHaveLength(1);
+    expect(logFiles[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z\.log$/);
   });
 });
 

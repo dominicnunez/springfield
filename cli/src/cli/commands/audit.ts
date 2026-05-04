@@ -444,14 +444,22 @@ export function buildAuditPromptWithExceptions(
 }
 
 function logToFile(
-  logDir: string,
+  logFile: string,
   iter: number,
   step: string,
   output: string,
 ): void {
-  const logFile = join(logDir, `iter${iter}-${step}.log`);
+  const normalizedOutput = output.endsWith("\n") ? output : `${output}\n`;
+  const section = [
+    "",
+    `===== Willie iteration ${iter}: ${step} output =====`,
+    normalizedOutput,
+    `===== End Willie iteration ${iter}: ${step} output =====`,
+    "",
+  ].join("\n");
+
   try {
-    appendFileSync(logFile, output);
+    appendFileSync(logFile, section);
   } catch (err) {
     logWarning(`Failed to write log to ${logFile}: ${err}`);
   }
@@ -473,14 +481,14 @@ async function runAuditStep(
   engine: Engine,
   auditPrompt: string,
   sourcePath: string | undefined,
-  logDir: string,
+  logFile: string,
   iter: number,
 ): Promise<AuditStepOutput> {
   logInfo("Step 1: Running audit...");
 
   const prompt = buildAuditPromptWithExceptions(auditPrompt, sourcePath);
   const result = await engine.run(prompt);
-  logToFile(logDir, iter, "audit", result.output);
+  logToFile(logFile, iter, "audit", result.output);
 
   if (checkRateLimited(result))
     return { result: "rate-limited", matchedExceptions: "" };
@@ -534,7 +542,7 @@ async function runAuditStep(
 async function runValidateStep(
   engine: Engine,
   matchedExceptions: string,
-  logDir: string,
+  logFile: string,
   iter: number,
 ): Promise<StepResult> {
   logInfo("Step 2: Validating findings...");
@@ -544,7 +552,7 @@ async function runValidateStep(
     : VALIDATE_PROMPT;
 
   const result = await engine.run(prompt);
-  logToFile(logDir, iter, "validate", result.output);
+  logToFile(logFile, iter, "validate", result.output);
 
   if (checkRateLimited(result)) return "rate-limited";
 
@@ -574,7 +582,7 @@ async function runValidateStep(
 async function runFixStep(
   engine: Engine,
   fixPrompt: string,
-  logDir: string,
+  logFile: string,
   iter: number,
 ): Promise<StepResult> {
   if (!existsSync(AUDIT_REPORT_FILE)) {
@@ -585,7 +593,7 @@ async function runFixStep(
   logInfo("Step 3: Fixing issues...");
 
   const result = await engine.run(fixPrompt);
-  logToFile(logDir, iter, "fix", result.output);
+  logToFile(logFile, iter, "fix", result.output);
 
   if (checkRateLimited(result)) return "rate-limited";
 
@@ -652,7 +660,7 @@ export async function runPipeline(
   auditPrompt: string,
   sourcePath: string | undefined,
   fixPrompt: string,
-  logDir: string,
+  logFile: string,
   iter: number,
   state: SoftLimitState,
   config: Config,
@@ -663,7 +671,7 @@ export async function runPipeline(
     switch (step) {
       case "audit": {
         const r = await withRateLimitRetry(
-          () => runAuditStep(engine, auditPrompt, sourcePath, logDir, iter),
+          () => runAuditStep(engine, auditPrompt, sourcePath, logFile, iter),
           (o) => o.result === "rate-limited",
           state,
           config,
@@ -677,7 +685,7 @@ export async function runPipeline(
       }
       case "validate": {
         const r = await withRateLimitRetry(
-          () => runValidateStep(engine, matchedExceptions, logDir, iter),
+          () => runValidateStep(engine, matchedExceptions, logFile, iter),
           (o) => o === "rate-limited",
           state,
           config,
@@ -689,7 +697,7 @@ export async function runPipeline(
       }
       case "fix": {
         const r = await withRateLimitRetry(
-          () => runFixStep(engine, fixPrompt, logDir, iter),
+          () => runFixStep(engine, fixPrompt, logFile, iter),
           (o) => o === "rate-limited",
           state,
           config,
@@ -723,7 +731,7 @@ export async function auditLoop(
 
   const {
     projectName,
-    logDir,
+    logFile,
     model,
     effort,
     engine,
@@ -748,6 +756,7 @@ export async function auditLoop(
   console.log(`Audit prompt: ${auditPromptSource}`);
   console.log(`Lint command: ${lintCmd ?? "none detected"}`);
   console.log(`Test command: ${testCmd ?? "none detected"}`);
+  console.log(`Log file: ${logFile}`);
 
   let iter = 0;
   const rateLimitState: SoftLimitState = { retries: 0 };
@@ -777,7 +786,7 @@ export async function auditLoop(
       auditPrompt,
       options.sourcePath,
       fixPrompt,
-      logDir,
+      logFile,
       iter,
       rateLimitState,
       config,
@@ -805,5 +814,5 @@ export async function auditLoop(
   console.log("");
   console.log(pc.cyan(formatDivider("Willie Complete")));
   console.log(`Total iterations: ${iter}`);
-  console.log(`Logs: ${logDir}/`);
+  console.log(`Log file: ${logFile}`);
 }

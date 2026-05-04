@@ -217,7 +217,7 @@ If auto-detection fails or you need a custom command, set `test-cmd` under `[ral
 - **Test-gated completion** - Runs test suite after each iteration, blocks progress on failure
 - **Double verification** - PRD.md check + final test suite before declaring complete
 - **Progress persistence** - Learnings survive across iterations in `~/.sfk/progress/`
-- **External logging** - Per-project logs at `~/.sfk/logs/sfk-<project>.log`
+- **External logging** - Per-run logs at `~/.sfk/logs/<project>/<agent>/<timestamp>.log`
 - **Auto-commit** - Commits changes automatically with descriptive messages
 - **Automatic fallback** - Switches to fallback model on rate limits (OpenCode)
 - **Skip commits** - Test PRDs without polluting git history

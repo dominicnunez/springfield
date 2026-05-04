@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, unlinkSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import pc from "picocolors";
 import type { Config } from "../../config/loader.js";
 import { getCurrentModel, getRalphEffort } from "../../config/loader.js";
@@ -37,6 +37,7 @@ import {
 import { initializeRalphEngine } from "../engine-factory.js";
 import { runGitStdout } from "../git.js";
 import { notify } from "../notify.js";
+import { getRunLogFile } from "../run-log.js";
 import { resolveRunRateLimitAction } from "../run-rate-limit.js";
 
 function sleep(seconds: number): Promise<void> {
@@ -122,7 +123,7 @@ function initializeRunSession(
   engineOverride?: Engine,
 ): RunSession {
   const projectName = basename(process.cwd());
-  const logFile = join(config.logDir, `ralph-${projectName}.log`);
+  const logFile = getRunLogFile(config.logDir, projectName, "ralph");
   const progressFile = getProgressFile(projectName, config.progressDir);
   const model = getCurrentModel(config);
   const engine = initializeRalphEngine(

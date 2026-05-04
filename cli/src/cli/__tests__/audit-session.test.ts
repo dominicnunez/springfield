@@ -7,7 +7,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { Config } from "../../config/loader.js";
 import type { Engine } from "../../engines/base.js";
 import { initLogger } from "../../ui/logger.js";
@@ -133,6 +133,25 @@ describe("audit session", () => {
 
     expect(session).not.toBeNull();
     expect(session?.fixPrompt).toContain("push committed changes");
+  });
+
+  test("uses a single Willie run log file scoped by project and agent", () => {
+    const session = initializeAuditSession(
+      baseConfig(tempRoot),
+      {},
+      "fallback prompt",
+      stubEngine(),
+    );
+
+    if (!session) throw new Error("Expected audit session");
+
+    expect(dirname(session.logFile)).toBe(
+      join(tempRoot, "logs", "project", "willie"),
+    );
+    expect(basename(session.logFile)).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z\.log$/,
+    );
+    expect(existsSync(dirname(session.logFile))).toBe(true);
   });
 
   test("returns null when the selected engine is unavailable", () => {

@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { basename } from "node:path";
 import type { Config } from "../config/loader.js";
 import {
   getWillieEffort,
@@ -8,8 +8,10 @@ import {
 } from "../config/loader.js";
 import { type Engine, generateFixPrompt } from "../engines/base.js";
 import { detectLintCommand, detectTestCommand } from "../tasks/verification.js";
+import { initLogger } from "../ui/logger.js";
 import { AUDIT_PROMPT_FILE, ensureAuditDirectories } from "./audit-paths.js";
 import { initializeWillieEngine } from "./engine-factory.js";
+import { getRunLogFile } from "./run-log.js";
 
 export interface ResolvedPrompt {
   text: string;
@@ -19,11 +21,12 @@ export interface ResolvedPrompt {
 export interface AuditSessionOptions {
   auditPromptPath?: string;
   lintCmd?: string;
+  verbose?: boolean;
 }
 
 export interface AuditSession {
   projectName: string;
-  logDir: string;
+  logFile: string;
   model: string;
   effort: string;
   engine: Engine;
@@ -69,11 +72,8 @@ export function initializeAuditSession(
   engineOverride?: Engine,
 ): AuditSession | null {
   const projectName = basename(process.cwd());
-  const logDir = join(config.logDir, `willie-${projectName}`);
-
-  if (!existsSync(logDir)) {
-    mkdirSync(logDir, { recursive: true });
-  }
+  const logFile = getRunLogFile(config.logDir, projectName, "willie");
+  initLogger({ logFile, verbose: options.verbose });
 
   const model = getWillieModel(config);
   const effort = getWillieEffort(config);
@@ -98,7 +98,7 @@ export function initializeAuditSession(
 
   return {
     projectName,
-    logDir,
+    logFile,
     model,
     effort,
     engine,
